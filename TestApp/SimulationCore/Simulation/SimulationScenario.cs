@@ -1,0 +1,5 @@
+enum SimulationScenario
+{
+    TwoBodyCircular,
+    PlanetMoonShip
+}
