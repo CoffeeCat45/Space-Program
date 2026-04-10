@@ -2,32 +2,32 @@ using System;
 
 static class Gravity
 {
+    // CalculateAcceleration = вычислить ускорение от гравитации.
     public static Vector2 CalculateAcceleration(
         Vector2 objectPosition,
         Vector2 sourcePosition,
-        double sourceGravityParameter
+        double sourceMu
     )
     {
-        // Вектор от объекта к источнику гравитации.
         Vector2 toSource = sourcePosition.Subtract(objectPosition);
-        double distance = toSource.Length();
+        double distanceSquared = toSource.LengthSquared();
 
-        if (distance == 0)
+        if (distanceSquared == 0)
         {
-            return new Vector2(0, 0);
+            return Vector2.Zero();
         }
 
-        Vector2 directionToSource = toSource.Normalize();
+        double distance = Math.Sqrt(distanceSquared);
+        Vector2 directionToSource = toSource.Multiply(1.0 / distance);
 
-        // Чем дальше объект от источника, тем слабее гравитация: acceleration = mu / distance^2.
-        double accelerationSize = sourceGravityParameter / (distance * distance);
+        double accelerationSize = sourceMu / distanceSquared;
 
         return directionToSource.Multiply(accelerationSize);
     }
 
-    public static double CalculateCircularOrbitSpeed(double gravityParameter, double radius)
+    // CalculateCircularOrbitSpeed = вычислить скорость для круговой орбиты.
+    public static double CalculateCircularOrbitSpeed(double mu, double radius)
     {
-        // Скорость для круговой орбиты: speed = sqrt(mu / radius).
-        return Math.Sqrt(gravityParameter / radius);
+        return Math.Sqrt(mu / radius);
     }
 }

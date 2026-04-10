@@ -1,5 +1,6 @@
 static class Integrator
 {
+    // StepPosition = сделать шаг позиции.
     public static void StepPosition(Body body, Vector2 acceleration, double dt)
     {
         if (body.isStatic)
@@ -15,6 +16,7 @@ static class Integrator
         body.position = body.position.Add(movement);
     }
 
+    // StepVelocity = сделать шаг скорости.
     public static void StepVelocity(
         Body body,
         Vector2 oldAcceleration,

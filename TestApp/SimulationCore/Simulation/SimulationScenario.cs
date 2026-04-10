@@ -1,5 +1,6 @@
-enum SimulationScenario
+public enum SimulationScenario
 {
     TwoBodyCircular,
-    PlanetMoonShip
+    PlanetMoonShip,
+    MoonFlyby
 }

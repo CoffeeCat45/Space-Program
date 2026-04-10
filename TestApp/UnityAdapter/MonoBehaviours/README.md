@@ -1,3 +1,11 @@
-Unity-specific MonoBehaviour wrappers will live here later.
+## MonoBehaviours
 
-Do not put simulation physics here. Unity should call the SimulationCore code instead.
+Здесь лежат Unity-компоненты, которые:
+
+- создают `Simulation`
+- двигают её через fixed timestep
+- передают состояние в слой отрисовки
+
+Первый компонент:
+
+- `SimulationRunner.cs`

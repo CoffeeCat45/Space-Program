@@ -11,6 +11,11 @@ struct Vector2
         this.y = y;
     }
 
+    public static Vector2 Zero()
+    {
+        return new Vector2(0, 0);
+    }
+
     public Vector2 Add(Vector2 other)
     {
         return new Vector2(
@@ -35,9 +40,14 @@ struct Vector2
         );
     }
 
+    public double LengthSquared()
+    {
+        return this.x * this.x + this.y * this.y;
+    }
+
     public double Length()
     {
-        return Math.Sqrt(this.x * this.x + this.y * this.y);
+        return Math.Sqrt(LengthSquared());
     }
 
     public Vector2 Normalize()
@@ -46,7 +56,7 @@ struct Vector2
 
         if (length == 0)
         {
-            return new Vector2(0, 0);
+            return Zero();
         }
 
         return new Vector2(

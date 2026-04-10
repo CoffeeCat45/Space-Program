@@ -12,3 +12,4 @@ D:\Projects\games\test1\TestApp\obj\Debug\net10.0\refint\TestApp.dll
 D:\Projects\games\test1\TestApp\obj\Debug\net10.0\TestApp.pdb
 D:\Projects\games\test1\TestApp\obj\Debug\net10.0\TestApp.genruntimeconfig.cache
 D:\Projects\games\test1\TestApp\obj\Debug\net10.0\ref\TestApp.dll
+D:\Projects\games\test1\TestApp\obj\Debug\net10.0\TestApp.sourcelink.json

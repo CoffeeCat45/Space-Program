@@ -1,3 +1,13 @@
-Unity-specific rendering code will live here later.
+## Rendering
 
-This folder should only visualize simulation state, not calculate physics.
+Здесь лежат простые Unity-хелперы для визуализации тел симуляции.
+
+Первый файл:
+
+- `BodyView.cs`
+
+Он:
+
+- создаёт `GameObject` для тела
+- обновляет позицию по `BodyState`
+- задаёт простой цвет и размер

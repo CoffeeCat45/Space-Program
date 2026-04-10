@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- UnityAdapter хранится рядом с ядром, но не должен компилироваться в консольный .NET-проект. -->
+    <Compile Remove="UnityAdapter\**\*.cs" />
+  </ItemGroup>
+
 </Project>
