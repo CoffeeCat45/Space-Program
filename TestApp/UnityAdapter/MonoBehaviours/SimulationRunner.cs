@@ -6,6 +6,7 @@ public class SimulationRunner : MonoBehaviour
     [Header("Simulation")]
     public SimulationScenario scenario = SimulationScenario.MoonFlyby;
     public float fixedDt = 0.02f;
+    public float timeScale = 1.0f;
     public float worldScale = 0.05f;
 
     Simulation simulation;
@@ -20,7 +21,7 @@ public class SimulationRunner : MonoBehaviour
 
     void Update()
     {
-        accumulator += Time.deltaTime;
+        accumulator += Time.deltaTime * Mathf.Max(0.0f, timeScale);
 
         while (accumulator >= fixedDt)
         {
