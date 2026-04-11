@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 class Simulation
 {
@@ -28,11 +29,12 @@ class Simulation
             Vector2.Zero(),
             Vector2.Zero(),
             Vector2.Zero(),
-            50000,
+            100000,
+            20,
             true
         );
 
-        double moonOrbitRadius = 230;
+        double moonOrbitRadius = 280;
         Vector2 moonStartPosition = new Vector2(moonOrbitRadius, 0);
         double moonStartRadius = planet.position.Subtract(moonStartPosition).Length();
         moonCircularSpeedAtStart = Gravity.CalculateCircularOrbitSpeed(
@@ -61,7 +63,8 @@ class Simulation
             moonStartPosition,
             moonStartVelocity,
             Vector2.Zero(),
-            7000,
+            14000,
+            6,
             false
         );
         moonSphereOfInfluenceRadius = CalculateSphereOfInfluenceRadius(
@@ -137,6 +140,332 @@ class Simulation
     public void ApplyShipDeltaV(Vector2 deltaV)
     {
         ship.velocity = ship.velocity.Add(deltaV);
+    }
+
+    public Simulation CreateCopy()
+    {
+        Simulation copy = new Simulation(scenario);
+
+        copy.planet = CopyBody(planet);
+        copy.moon = CopyBody(moon);
+        copy.ship = CopyVessel(ship);
+
+        if (
+            scenario == SimulationScenario.PlanetMoonShip ||
+            scenario == SimulationScenario.MoonFlyby
+        )
+        {
+            copy.bodies = new Body[]
+            {
+                copy.planet,
+                copy.moon,
+                copy.ship
+            };
+        }
+        else
+        {
+            copy.bodies = new Body[]
+            {
+                copy.planet,
+                copy.ship
+            };
+        }
+
+        copy.lastGravityAcceleration = lastGravityAcceleration;
+        copy.lastMoonGravityAcceleration = lastMoonGravityAcceleration;
+        copy.circularSpeedAtStart = circularSpeedAtStart;
+        copy.moonCircularSpeedAtStart = moonCircularSpeedAtStart;
+        copy.moonSphereOfInfluenceRadius = moonSphereOfInfluenceRadius;
+        copy.minShipDistanceToPlanet = minShipDistanceToPlanet;
+        copy.maxShipDistanceToPlanet = maxShipDistanceToPlanet;
+        copy.initialShipSpecificEnergy = initialShipSpecificEnergy;
+        copy.initialShipAngularMomentum = initialShipAngularMomentum;
+        copy.activePrimaryBodyName = activePrimaryBodyName;
+
+        return copy;
+    }
+
+    Body CopyBody(Body body)
+    {
+        return new Body(
+            body.name,
+            body.position,
+            body.velocity,
+            body.acceleration,
+            body.mu,
+            body.radius,
+            body.isStatic
+        );
+    }
+
+    Vessel CopyVessel(Vessel vessel)
+    {
+        Vessel copy = new Vessel(
+            vessel.name,
+            vessel.position,
+            vessel.velocity
+        );
+
+        copy.acceleration = vessel.acceleration;
+        copy.mu = vessel.mu;
+        copy.radius = vessel.radius;
+        copy.isStatic = vessel.isStatic;
+        copy.thrust = vessel.thrust;
+
+        return copy;
+    }
+
+    public Vector2[] GetShipOrbitPathRelativeToActivePrimary(int pointCount)
+    {
+        return GetOrbitPathRelativeToBody(
+            GetActivePrimaryBody(),
+            ship.position,
+            ship.velocity,
+            pointCount
+        );
+    }
+
+    public Vector2[] GetPreviewShipOrbitPathRelativeToActivePrimary(
+        Vector2 plannedDeltaV,
+        int pointCount
+    )
+    {
+        return GetOrbitPathRelativeToBody(
+            GetActivePrimaryBody(),
+            ship.position,
+            ship.velocity.Add(plannedDeltaV),
+            pointCount
+        );
+    }
+
+    public ClosestApproachInfo GetClosestApproachToMoon(
+        Vector2 plannedDeltaV,
+        int stepCount,
+        double dt
+    )
+    {
+        if (
+            scenario != SimulationScenario.PlanetMoonShip &&
+            scenario != SimulationScenario.MoonFlyby
+        )
+        {
+            return ClosestApproachInfo.None();
+        }
+
+        Simulation preview = CreateCopy();
+        preview.ship.thrust = Vector2.Zero();
+        preview.ApplyShipDeltaV(plannedDeltaV);
+
+        double closestDistance = double.PositiveInfinity;
+        double closestTime = 0;
+        Vector2 closestShipPosition = preview.ship.position;
+        Vector2 closestMoonPosition = preview.moon.position;
+
+        for (int i = 0; i <= stepCount; i++)
+        {
+            double distance = preview.GetShipDistanceToMoon();
+
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestTime = i * dt;
+                closestShipPosition = preview.ship.position;
+                closestMoonPosition = preview.moon.position;
+            }
+
+            preview.Update(dt);
+        }
+
+        return new ClosestApproachInfo(
+            true,
+            closestDistance,
+            closestTime,
+            closestShipPosition,
+            closestMoonPosition,
+            closestDistance <= preview.moonSphereOfInfluenceRadius
+        );
+    }
+
+    public SphereOfInfluenceEntryPreview GetMoonSphereOfInfluenceEntryPreview(
+        Vector2 plannedDeltaV,
+        int stepCount,
+        double dt
+    )
+    {
+        if (
+            scenario != SimulationScenario.PlanetMoonShip &&
+            scenario != SimulationScenario.MoonFlyby
+        )
+        {
+            return SphereOfInfluenceEntryPreview.None();
+        }
+
+        Simulation preview = CreateCopy();
+        preview.ship.thrust = Vector2.Zero();
+        preview.ApplyShipDeltaV(plannedDeltaV);
+
+        List<Vector2> points = new List<Vector2>();
+
+        for (int i = 0; i <= stepCount; i++)
+        {
+            points.Add(preview.ship.position);
+
+            double distanceToMoon = preview.GetShipDistanceToMoon();
+
+            if (distanceToMoon <= preview.moonSphereOfInfluenceRadius)
+            {
+                return new SphereOfInfluenceEntryPreview(
+                    true,
+                    i * dt,
+                    preview.ship.position,
+                    points.ToArray()
+                );
+            }
+
+            preview.Update(dt);
+        }
+
+        return new SphereOfInfluenceEntryPreview(
+            false,
+            0,
+            Vector2.Zero(),
+            Array.Empty<Vector2>()
+        );
+    }
+
+    Vector2[] GetOrbitPathRelativeToBody(
+        Body primaryBody,
+        Vector2 orbitingPosition,
+        Vector2 orbitingVelocity,
+        int pointCount
+    )
+    {
+        if (pointCount < 2 || primaryBody.mu <= 0)
+        {
+            return Array.Empty<Vector2>();
+        }
+
+        Vector2 relativePosition = orbitingPosition.Subtract(primaryBody.position);
+        Vector2 relativeVelocity = orbitingVelocity.Subtract(primaryBody.velocity);
+        double radius = relativePosition.Length();
+
+        if (radius == 0)
+        {
+            return Array.Empty<Vector2>();
+        }
+
+        double angularMomentum =
+            relativePosition.x * relativeVelocity.y -
+            relativePosition.y * relativeVelocity.x;
+
+        if (Math.Abs(angularMomentum) < 0.000001)
+        {
+            return Array.Empty<Vector2>();
+        }
+
+        double speedSquared = relativeVelocity.LengthSquared();
+        double radialVelocity = Dot(relativePosition, relativeVelocity);
+        Vector2 eccentricityVector = relativePosition
+            .Multiply((speedSquared - primaryBody.mu / radius) / primaryBody.mu)
+            .Subtract(relativeVelocity.Multiply(radialVelocity / primaryBody.mu));
+        double eccentricity = eccentricityVector.Length();
+        double semiLatusRectum =
+            angularMomentum * angularMomentum / primaryBody.mu;
+
+        if (semiLatusRectum <= 0)
+        {
+            return Array.Empty<Vector2>();
+        }
+
+        Vector2 periapsisDirection =
+            eccentricity > 0.000001 ?
+            eccentricityVector.Normalize() :
+            relativePosition.Normalize();
+        Vector2 sideDirection = new Vector2(
+            -periapsisDirection.y,
+            periapsisDirection.x
+        );
+
+        if (angularMomentum < 0)
+        {
+            sideDirection = sideDirection.Multiply(-1);
+        }
+
+        List<Vector2> points = new List<Vector2>();
+
+        if (eccentricity < 1.0)
+        {
+            for (int i = 0; i <= pointCount; i++)
+            {
+                double trueAnomaly =
+                    (Math.PI * 2.0 * i) / pointCount;
+                AddOrbitPathPoint(
+                    points,
+                    primaryBody.position,
+                    periapsisDirection,
+                    sideDirection,
+                    semiLatusRectum,
+                    eccentricity,
+                    trueAnomaly
+                );
+            }
+        }
+        else
+        {
+            double maxTrueAnomaly = eccentricity == 1.0 ?
+                Math.PI * 0.85 :
+                Math.Acos(-1.0 / eccentricity) * 0.92;
+
+            for (int i = 0; i < pointCount; i++)
+            {
+                double t = pointCount == 1 ?
+                    0 :
+                    (double)i / (pointCount - 1);
+                double trueAnomaly =
+                    -maxTrueAnomaly + 2.0 * maxTrueAnomaly * t;
+                AddOrbitPathPoint(
+                    points,
+                    primaryBody.position,
+                    periapsisDirection,
+                    sideDirection,
+                    semiLatusRectum,
+                    eccentricity,
+                    trueAnomaly
+                );
+            }
+        }
+
+        return points.ToArray();
+    }
+
+    void AddOrbitPathPoint(
+        List<Vector2> points,
+        Vector2 primaryPosition,
+        Vector2 periapsisDirection,
+        Vector2 sideDirection,
+        double semiLatusRectum,
+        double eccentricity,
+        double trueAnomaly
+    )
+    {
+        double denominator = 1.0 + eccentricity * Math.Cos(trueAnomaly);
+
+        if (denominator <= 0.000001)
+        {
+            return;
+        }
+
+        double radius = semiLatusRectum / denominator;
+        Vector2 direction = periapsisDirection
+            .Multiply(Math.Cos(trueAnomaly))
+            .Add(sideDirection.Multiply(Math.Sin(trueAnomaly)));
+
+        points.Add(primaryPosition.Add(direction.Multiply(radius)));
+    }
+
+    double Dot(Vector2 a, Vector2 b)
+    {
+        return a.x * b.x + a.y * b.y;
     }
 
     // GetBodyStates = получить снимок состояний тел для внешнего слоя, например будущего Unity-адаптера.
@@ -217,34 +546,39 @@ class Simulation
 
         for (int i = 0; i < bodies.Length; i++)
         {
-            Body body = bodies[i];
-            Vector2 totalAcceleration = Vector2.Zero();
-
-            if (!body.isStatic)
-            {
-                for (int j = 0; j < bodies.Length; j++)
-                {
-                    Body source = bodies[j];
-
-                    if (source == body)
-                    {
-                        continue;
-                    }
-
-                    Vector2 acceleration = Gravity.CalculateAcceleration(
-                        body.position,
-                        source.position,
-                        source.mu
-                    );
-
-                    totalAcceleration = totalAcceleration.Add(acceleration);
-                }
-            }
-
-            accelerations[i] = totalAcceleration;
+            accelerations[i] = CalculateBodyAcceleration(bodies[i]);
         }
 
         return accelerations;
+    }
+
+    Vector2 CalculateBodyAcceleration(Body body)
+    {
+        if (body.isStatic)
+        {
+            return Vector2.Zero();
+        }
+
+        if (body == ship)
+        {
+            Body activePrimaryBody = GetActivePrimaryBody();
+            return Gravity.CalculateAcceleration(
+                ship.position,
+                activePrimaryBody.position,
+                activePrimaryBody.mu
+            );
+        }
+
+        if (body == moon)
+        {
+            return Gravity.CalculateAcceleration(
+                moon.position,
+                planet.position,
+                planet.mu
+            );
+        }
+
+        return Vector2.Zero();
     }
 
     // UpdateOrbitStats = обновить статистику орбиты корабля.
@@ -304,6 +638,31 @@ class Simulation
         return activePrimaryBody.position.Subtract(ship.position).Length();
     }
 
+    // GetShipAltitudeAboveActivePrimary = получить высоту корабля над поверхностью текущего главного тела.
+    public double GetShipAltitudeAboveActivePrimary()
+    {
+        Body activePrimaryBody = GetActivePrimaryBody();
+        return GetShipDistanceToActivePrimary() - activePrimaryBody.radius;
+    }
+
+    // GetShipAltitudeAbovePlanet = получить высоту корабля над поверхностью планеты.
+    public double GetShipAltitudeAbovePlanet()
+    {
+        return GetShipDistanceToPlanet() - planet.radius;
+    }
+
+    // GetActivePrimaryPosition = получить позицию текущего главного тела для визуализации.
+    public Vector2 GetActivePrimaryPosition()
+    {
+        return GetActivePrimaryBody().position;
+    }
+
+    // GetActivePrimaryRadius = получить радиус текущего главного тела.
+    public double GetActivePrimaryRadius()
+    {
+        return GetActivePrimaryBody().radius;
+    }
+
     // GetActivePrimarySphereOfInfluenceRadius = получить радиус текущей сферы влияния для активного тела.
     public double GetActivePrimarySphereOfInfluenceRadius()
     {
@@ -321,6 +680,12 @@ class Simulation
     public double GetShipSpeed()
     {
         return ship.velocity.Length();
+    }
+
+    // GetShipAcceleration = получить текущее полное ускорение корабля.
+    public double GetShipAcceleration()
+    {
+        return ship.acceleration.Add(ship.thrust).Length();
     }
 
     // GetMoonSpeed = получить скорость луны.
@@ -537,6 +902,12 @@ class Simulation
         return GetShipPeriapsisRelativeToBody(GetActivePrimaryBody());
     }
 
+    public double GetShipPeriapsisAltitudeRelativeToActivePrimary()
+    {
+        Body activePrimaryBody = GetActivePrimaryBody();
+        return GetShipPeriapsisRelativeToBody(activePrimaryBody) - activePrimaryBody.radius;
+    }
+
     double GetShipPeriapsisRelativeToBody(Body body)
     {
         return GetShipPeriapsisRelativeToBody(body, ship.velocity);
@@ -565,6 +936,19 @@ class Simulation
     public double GetShipApoapsisRelativeToActivePrimary()
     {
         return GetShipApoapsisRelativeToBody(GetActivePrimaryBody());
+    }
+
+    public double GetShipApoapsisAltitudeRelativeToActivePrimary()
+    {
+        Body activePrimaryBody = GetActivePrimaryBody();
+        double apoapsis = GetShipApoapsisRelativeToBody(activePrimaryBody);
+
+        if (double.IsInfinity(apoapsis))
+        {
+            return double.PositiveInfinity;
+        }
+
+        return apoapsis - activePrimaryBody.radius;
     }
 
     // GetPreviewShipOrbitTypeRelativeToActivePrimary = получить тип орбиты корабля после запланированного delta-v.
@@ -599,12 +983,34 @@ class Simulation
         return GetShipPeriapsisRelativeToBody(activePrimaryBody, previewVelocity);
     }
 
+    public double GetPreviewShipPeriapsisAltitudeRelativeToActivePrimary(Vector2 plannedDeltaV)
+    {
+        Body activePrimaryBody = GetActivePrimaryBody();
+        Vector2 previewVelocity = ship.velocity.Add(plannedDeltaV);
+        return GetShipPeriapsisRelativeToBody(activePrimaryBody, previewVelocity) -
+            activePrimaryBody.radius;
+    }
+
     // GetPreviewShipApoapsisRelativeToActivePrimary = получить апоцентр орбиты корабля после запланированного delta-v.
     public double GetPreviewShipApoapsisRelativeToActivePrimary(Vector2 plannedDeltaV)
     {
         Body activePrimaryBody = GetActivePrimaryBody();
         Vector2 previewVelocity = ship.velocity.Add(plannedDeltaV);
         return GetShipApoapsisRelativeToBody(activePrimaryBody, previewVelocity);
+    }
+
+    public double GetPreviewShipApoapsisAltitudeRelativeToActivePrimary(Vector2 plannedDeltaV)
+    {
+        Body activePrimaryBody = GetActivePrimaryBody();
+        Vector2 previewVelocity = ship.velocity.Add(plannedDeltaV);
+        double apoapsis = GetShipApoapsisRelativeToBody(activePrimaryBody, previewVelocity);
+
+        if (double.IsInfinity(apoapsis))
+        {
+            return double.PositiveInfinity;
+        }
+
+        return apoapsis - activePrimaryBody.radius;
     }
 
     double GetShipApoapsisRelativeToBody(Body body)
@@ -720,5 +1126,75 @@ struct BodyState
         this.velocity = velocity;
         this.isStatic = isStatic;
         this.isActivePrimary = isActivePrimary;
+    }
+}
+
+struct ClosestApproachInfo
+{
+    public bool hasApproach;
+    public double distance;
+    public double time;
+    public Vector2 shipPosition;
+    public Vector2 moonPosition;
+    public bool entersMoonSphereOfInfluence;
+
+    public ClosestApproachInfo(
+        bool hasApproach,
+        double distance,
+        double time,
+        Vector2 shipPosition,
+        Vector2 moonPosition,
+        bool entersMoonSphereOfInfluence
+    )
+    {
+        this.hasApproach = hasApproach;
+        this.distance = distance;
+        this.time = time;
+        this.shipPosition = shipPosition;
+        this.moonPosition = moonPosition;
+        this.entersMoonSphereOfInfluence = entersMoonSphereOfInfluence;
+    }
+
+    public static ClosestApproachInfo None()
+    {
+        return new ClosestApproachInfo(
+            false,
+            double.PositiveInfinity,
+            0,
+            Vector2.Zero(),
+            Vector2.Zero(),
+            false
+        );
+    }
+}
+
+struct SphereOfInfluenceEntryPreview
+{
+    public bool entersSphereOfInfluence;
+    public double entryTime;
+    public Vector2 entryPosition;
+    public Vector2[] pathPoints;
+
+    public SphereOfInfluenceEntryPreview(
+        bool entersSphereOfInfluence,
+        double entryTime,
+        Vector2 entryPosition,
+        Vector2[] pathPoints
+    )
+    {
+        this.entersSphereOfInfluence = entersSphereOfInfluence;
+        this.entryTime = entryTime;
+        this.entryPosition = entryPosition;
+        this.pathPoints = pathPoints;
+    }
+
+    public static SphereOfInfluenceEntryPreview None()
+    {
+        return new SphereOfInfluenceEntryPreview(
+            false,
+            0,
+            Vector2.Zero(),
+            Array.Empty<Vector2>()
+        );
     }
 }

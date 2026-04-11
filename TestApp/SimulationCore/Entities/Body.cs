@@ -5,6 +5,7 @@ class Body
     public Vector2 velocity;
     public Vector2 acceleration;
     public double mu;
+    public double radius;
     public bool isStatic;
 
     public Body(
@@ -13,6 +14,7 @@ class Body
         Vector2 velocity,
         Vector2 acceleration,
         double mu,
+        double radius,
         bool isStatic
     )
     {
@@ -21,6 +23,7 @@ class Body
         this.velocity = velocity;
         this.acceleration = acceleration;
         this.mu = mu;
+        this.radius = radius;
         this.isStatic = isStatic;
     }
 }
