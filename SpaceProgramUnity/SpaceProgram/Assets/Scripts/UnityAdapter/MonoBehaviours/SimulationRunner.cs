@@ -1,6 +1,15 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
+
+public enum ShipOrientationMode
+{
+    Manual,
+    Prograde,
+    Retrograde,
+    Maneuver
+}
 
 public class SimulationRunner : MonoBehaviour
 {
@@ -12,7 +21,8 @@ public class SimulationRunner : MonoBehaviour
 
     [Header("Ship Control")]
     public float shipTurnSpeedDegrees = 120.0f;
-    public float shipThrustAcceleration = 2.0f;
+    public float shipAutoTurnSpeedDegrees = 240.0f;
+    public float shipThrustForce = 60.0f;
 
     [Header("Maneuver Planning")]
     public double plannedDeltaVStep = 0.25;
@@ -24,20 +34,43 @@ public class SimulationRunner : MonoBehaviour
     public double previewAnalysisDt = 0.2;
     public float previewAnalysisUpdateInterval = 0.5f;
 
+    [Header("Warp")]
+    public float warpToPointTimeScale = 50.0f;
+    public double maneuverWarpLeadTime = 60.0;
+
+    [Header("Target")]
+    public string targetBodyName = "Moon";
+
     Simulation simulation;
-    float accumulator;
+    double accumulator;
     float shipRotationDegrees;
+    ShipOrientationMode shipOrientationMode = ShipOrientationMode.Manual;
     global::Vector2 plannedDeltaV;
+    global::Vector2 maneuverNodeDeltaV;
+    global::Vector2 maneuverNodePosition;
     global::Vector2 cachedPreviewPlannedDeltaV;
+    global::Vector2 cachedPreviewManeuverNodeDeltaV;
     ClosestApproachInfo cachedClosestApproach;
     SphereOfInfluenceEntryPreview cachedSphereOfInfluenceEntryPreview;
     bool isPaused;
     bool isInitialized;
     bool hasCachedPreviewAnalysis;
     string lastActivePrimaryBodyName;
+    string cachedPreviewTargetBodyName;
+    string warpLabel = "point";
+    bool hasManeuverNode;
+    bool cachedPreviewHasManeuverNode;
+    bool autoBurnActive;
+    bool autoBurnIsBurning;
     float previewAnalysisTimer;
     double previewAnalysisSimTimeSinceCache;
+    double warpRemainingTime;
+    double maneuverNodeTime;
+    double cachedPreviewManeuverNodeTime;
+    double autoBurnDuration;
+    double autoBurnRemainingTime;
     float[] timeScaleSteps = new float[] { 1.0f, 5.0f, 10.0f, 50.0f, 100.0f };
+    string[] targetBodyNames = new string[] { "Moon", "Planet" };
     Dictionary<string, GameObject> bodyObjects = new Dictionary<string, GameObject>();
 
     void Start()
@@ -54,6 +87,7 @@ public class SimulationRunner : MonoBehaviour
         SetupOrbitPreview();
         SetupSphereOfInfluenceView();
         lastActivePrimaryBodyName = simulation.activePrimaryBodyName;
+        EnsureValidTarget();
         isInitialized = true;
         RebuildPreviewAnalysis();
     }
@@ -68,15 +102,58 @@ public class SimulationRunner : MonoBehaviour
         UpdateShipInput();
         UpdateManeuverInput();
         UpdateTimeScaleInput();
+        UpdateTargetInput();
 
-        accumulator += Time.deltaTime * Mathf.Max(0.0f, GetEffectiveTimeScale());
+        double scaledDeltaTime =
+            Time.deltaTime * Mathf.Max(0.0f, GetEffectiveTimeScale());
 
-        while (accumulator >= fixedDt)
+        if (IsWarping())
         {
-            simulation.Update(fixedDt);
-            previewAnalysisSimTimeSinceCache += fixedDt;
+            scaledDeltaTime = System.Math.Min(
+                scaledDeltaTime,
+                warpRemainingTime
+            );
+        }
+
+        accumulator += scaledDeltaTime;
+
+        while (accumulator >= fixedDt || (IsWarping() && accumulator > 0.0))
+        {
+            double stepDt = fixedDt;
+
+            if (IsWarping())
+            {
+                stepDt = System.Math.Min(
+                    stepDt,
+                    System.Math.Min(accumulator, warpRemainingTime)
+                );
+            }
+
+            if (stepDt <= 0.0)
+            {
+                break;
+            }
+
+            UpdateAutoBurnThrustBeforeStep();
+            simulation.Update(stepDt);
+            previewAnalysisSimTimeSinceCache += stepDt;
+            UpdateAutoBurnAfterStep(stepDt);
+            UpdateManeuverNodeTime(stepDt);
             UpdateAutomaticTimeSlowdown();
-            accumulator -= fixedDt;
+            accumulator -= stepDt;
+
+            if (IsWarping())
+            {
+                warpRemainingTime -= stepDt;
+
+                if (warpRemainingTime <= 0.000001)
+                {
+                    warpRemainingTime = 0.0;
+                    accumulator = 0.0;
+                    RebuildPreviewAnalysis();
+                    break;
+                }
+            }
         }
 
         UpdatePreviewAnalysis();
@@ -85,17 +162,300 @@ public class SimulationRunner : MonoBehaviour
 
     internal global::Vector2 GetPlannedDeltaV()
     {
-        return plannedDeltaV;
+        return GetActivePlannedDeltaV();
     }
 
     internal float GetEffectiveTimeScale()
     {
-        return isPaused ? 0.0f : timeScale;
+        if (isPaused)
+        {
+            return 0.0f;
+        }
+
+        if (IsWarping())
+        {
+            return warpToPointTimeScale;
+        }
+
+        return timeScale;
     }
 
     internal bool IsPaused()
     {
         return isPaused;
+    }
+
+    internal bool IsWarping()
+    {
+        return warpRemainingTime > 0.0;
+    }
+
+    internal string GetWarpLabel()
+    {
+        return warpLabel;
+    }
+
+    internal string GetTargetBodyName()
+    {
+        EnsureValidTarget();
+        return targetBodyName;
+    }
+
+    internal double GetTargetDistance()
+    {
+        EnsureValidTarget();
+        return simulation.GetShipDistanceToBody(targetBodyName);
+    }
+
+    internal double GetTargetRelativeSpeed()
+    {
+        EnsureValidTarget();
+        return simulation.GetShipRelativeSpeedToBody(targetBodyName);
+    }
+
+    internal string GetShipOrientationModeName()
+    {
+        return shipOrientationMode.ToString();
+    }
+
+    internal double GetTimeToPeriapsis()
+    {
+        return simulation.GetShipTimeToPeriapsisRelativeToActivePrimary();
+    }
+
+    internal double GetTimeToApoapsis()
+    {
+        return simulation.GetShipTimeToApoapsisRelativeToActivePrimary();
+    }
+
+    internal bool HasManeuverNode()
+    {
+        return hasManeuverNode;
+    }
+
+    internal double GetManeuverNodeTime()
+    {
+        return maneuverNodeTime;
+    }
+
+    internal global::Vector2 GetManeuverNodeDeltaV()
+    {
+        return maneuverNodeDeltaV;
+    }
+
+    internal global::Vector2 GetManeuverNodePosition()
+    {
+        return maneuverNodePosition;
+    }
+
+    internal bool IsAutoBurnActive()
+    {
+        return autoBurnActive;
+    }
+
+    internal bool IsAutoBurning()
+    {
+        return autoBurnIsBurning;
+    }
+
+    internal double GetEstimatedManeuverBurnDuration()
+    {
+        if (!hasManeuverNode || maneuverNodeDeltaV.LengthSquared() <= 0.0)
+        {
+            return 0.0;
+        }
+
+        double acceleration = shipThrustForce / simulation.GetShipMass();
+
+        if (acceleration <= 0.0)
+        {
+            return double.PositiveInfinity;
+        }
+
+        return maneuverNodeDeltaV.Length() / acceleration;
+    }
+
+    internal double GetTimeToManeuverBurnStart()
+    {
+        if (!hasManeuverNode)
+        {
+            return double.PositiveInfinity;
+        }
+
+        return maneuverNodeTime;
+    }
+
+    internal global::Vector2 GetManeuverNodeProgradeDirection()
+    {
+        if (!hasManeuverNode)
+        {
+            return global::Vector2.Zero();
+        }
+
+        return simulation.GetShipProgradeDirectionRelativeToActivePrimaryAtTime(
+            maneuverNodeTime,
+            previewAnalysisDt
+        );
+    }
+
+    internal global::Vector2 GetManeuverNodeRetrogradeDirection()
+    {
+        return GetManeuverNodeProgradeDirection().Multiply(-1);
+    }
+
+    internal global::Vector2 GetManeuverNodeRadialOutDirection()
+    {
+        if (!hasManeuverNode)
+        {
+            return global::Vector2.Zero();
+        }
+
+        return simulation.GetShipRadialOutDirectionRelativeToActivePrimaryAtTime(
+            maneuverNodeTime,
+            previewAnalysisDt
+        );
+    }
+
+    internal global::Vector2 GetManeuverNodeRadialInDirection()
+    {
+        return GetManeuverNodeRadialOutDirection().Multiply(-1);
+    }
+
+    internal void SetManeuverNode(double time)
+    {
+        if (double.IsInfinity(time) || double.IsNaN(time) || time <= fixedDt)
+        {
+            return;
+        }
+
+        maneuverNodeTime = time;
+        maneuverNodePosition =
+            simulation.GetShipPositionAtTime(time, previewAnalysisDt);
+        plannedDeltaV = global::Vector2.Zero();
+        maneuverNodeDeltaV = global::Vector2.Zero();
+        hasManeuverNode = true;
+        RebuildPreviewAnalysis();
+    }
+
+    internal void SetManeuverNode(double time, global::Vector2 position)
+    {
+        SetManeuverNode(time);
+
+        if (hasManeuverNode)
+        {
+            maneuverNodePosition = position;
+        }
+    }
+
+    internal void MoveManeuverNode(double time)
+    {
+        if (double.IsInfinity(time) || double.IsNaN(time) || time <= fixedDt)
+        {
+            return;
+        }
+
+        if (!hasManeuverNode)
+        {
+            SetManeuverNode(time);
+            return;
+        }
+
+        maneuverNodeTime = time;
+        maneuverNodePosition =
+            simulation.GetShipPositionAtTime(time, previewAnalysisDt);
+        RebuildPreviewAnalysis();
+    }
+
+    internal void MoveManeuverNode(double time, global::Vector2 position)
+    {
+        MoveManeuverNode(time);
+
+        if (hasManeuverNode)
+        {
+            maneuverNodePosition = position;
+        }
+    }
+
+    internal void SetManeuverNodeAtPeriapsis()
+    {
+        SetManeuverNode(GetTimeToPeriapsis());
+    }
+
+    internal void SetManeuverNodeAtApoapsis()
+    {
+        SetManeuverNode(GetTimeToApoapsis());
+    }
+
+    internal void WarpToManeuverStart()
+    {
+        if (!hasManeuverNode || maneuverNodeTime <= fixedDt)
+        {
+            return;
+        }
+
+        double burnStartTime = GetTimeToManeuverBurnStart();
+
+        if (double.IsInfinity(burnStartTime))
+        {
+            return;
+        }
+
+        double warpTime = burnStartTime - maneuverWarpLeadTime;
+
+        if (warpTime <= fixedDt)
+        {
+            return;
+        }
+
+        warpRemainingTime = warpTime;
+        warpLabel = "maneuver start";
+        isPaused = false;
+    }
+
+    internal void StartAutoBurn()
+    {
+        if (!hasManeuverNode || maneuverNodeDeltaV.LengthSquared() <= 0.0)
+        {
+            return;
+        }
+
+        autoBurnDuration = GetEstimatedManeuverBurnDuration();
+
+        if (double.IsInfinity(autoBurnDuration) || autoBurnDuration <= 0.0)
+        {
+            return;
+        }
+
+        autoBurnRemainingTime = autoBurnDuration;
+        autoBurnActive = true;
+        autoBurnIsBurning = false;
+        shipOrientationMode = ShipOrientationMode.Maneuver;
+        isPaused = false;
+    }
+
+    internal void ClearManeuverNode()
+    {
+        ClearManeuverPlan();
+    }
+
+    internal global::Vector2[] GetPlannedOrbitPath(int pointCount)
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetFiniteBurnPreviewShipOrbitPathRelativeToActivePrimary(
+                maneuverNodeDeltaV,
+                shipThrustForce,
+                GetEstimatedManeuverBurnDuration(),
+                pointCount,
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetPreviewShipOrbitPathRelativeToActivePrimary(
+            plannedDeltaV,
+            pointCount
+        );
     }
 
     internal double GetFineManeuverStep()
@@ -106,6 +466,54 @@ public class SimulationRunner : MonoBehaviour
     internal double GetCoarseManeuverStep()
     {
         return plannedDeltaVStep * coarseManeuverStepMultiplier;
+    }
+
+    internal void WarpBy(double seconds)
+    {
+        if (simulation == null || seconds <= 0)
+        {
+            return;
+        }
+
+        warpRemainingTime = seconds;
+        warpLabel = "point";
+        isPaused = false;
+    }
+
+    internal void WarpToClosestApproach()
+    {
+        ClosestApproachInfo closestApproach = GetCachedClosestApproach();
+
+        if (!closestApproach.hasApproach || closestApproach.time <= fixedDt)
+        {
+            return;
+        }
+
+        warpRemainingTime = closestApproach.time;
+        warpLabel = "CA";
+        isPaused = false;
+    }
+
+    internal void WarpToPeriapsis()
+    {
+        WarpToOrbitalEvent(GetTimeToPeriapsis(), "Pe");
+    }
+
+    internal void WarpToApoapsis()
+    {
+        WarpToOrbitalEvent(GetTimeToApoapsis(), "Ap");
+    }
+
+    void WarpToOrbitalEvent(double eventTime, string label)
+    {
+        if (double.IsInfinity(eventTime) || eventTime <= fixedDt)
+        {
+            return;
+        }
+
+        warpRemainingTime = eventTime;
+        warpLabel = label;
+        isPaused = false;
     }
 
     internal ClosestApproachInfo GetCachedClosestApproach()
@@ -159,17 +567,24 @@ public class SimulationRunner : MonoBehaviour
         }
 
         cachedPreviewPlannedDeltaV = plannedDeltaV;
-        cachedClosestApproach = simulation.GetClosestApproachToMoon(
-            plannedDeltaV,
+        cachedPreviewManeuverNodeDeltaV = maneuverNodeDeltaV;
+        cachedPreviewHasManeuverNode = hasManeuverNode;
+        cachedPreviewManeuverNodeTime = maneuverNodeTime;
+        cachedPreviewTargetBodyName = targetBodyName;
+        cachedClosestApproach = simulation.GetClosestApproachToBody(
+            targetBodyName,
+            GetActivePlannedDeltaV(),
             previewAnalysisStepCount,
-            previewAnalysisDt
+            previewAnalysisDt,
+            GetActiveManeuverTime()
         );
         cachedSphereOfInfluenceEntryPreview =
             simulation.GetMoonSphereOfInfluenceEntryPreview(
-                plannedDeltaV,
+                GetActivePlannedDeltaV(),
                 previewAnalysisStepCount,
-                previewAnalysisDt
-        );
+                previewAnalysisDt,
+                GetActiveManeuverTime()
+            );
         previewAnalysisTimer = 0.0f;
         previewAnalysisSimTimeSinceCache = 0.0;
         hasCachedPreviewAnalysis = true;
@@ -191,7 +606,40 @@ public class SimulationRunner : MonoBehaviour
     {
         return plannedDeltaV
             .Subtract(cachedPreviewPlannedDeltaV)
-            .LengthSquared() > 0.000001;
+            .LengthSquared() > 0.000001 ||
+            maneuverNodeDeltaV
+                .Subtract(cachedPreviewManeuverNodeDeltaV)
+                .LengthSquared() > 0.000001 ||
+            cachedPreviewHasManeuverNode != hasManeuverNode ||
+            System.Math.Abs(
+                cachedPreviewManeuverNodeTime - maneuverNodeTime
+            ) > previewAnalysisDt ||
+            cachedPreviewTargetBodyName != targetBodyName;
+    }
+
+    global::Vector2 GetActivePlannedDeltaV()
+    {
+        return hasManeuverNode ? maneuverNodeDeltaV : plannedDeltaV;
+    }
+
+    double GetActiveManeuverTime()
+    {
+        return hasManeuverNode ? maneuverNodeTime : 0.0;
+    }
+
+    void UpdateManeuverNodeTime(double dt)
+    {
+        if (!hasManeuverNode)
+        {
+            return;
+        }
+
+        maneuverNodeTime -= dt;
+
+        if (maneuverNodeTime < 0.0)
+        {
+            maneuverNodeTime = 0.0;
+        }
     }
 
     void UpdateShipInput()
@@ -203,6 +651,8 @@ public class SimulationRunner : MonoBehaviour
             simulation.SetShipThrust(global::Vector2.Zero());
             return;
         }
+
+        UpdateOrientationModeInput(keyboard);
 
         float turnInput = 0.0f;
 
@@ -216,7 +666,15 @@ public class SimulationRunner : MonoBehaviour
             turnInput -= 1.0f;
         }
 
-        shipRotationDegrees += turnInput * shipTurnSpeedDegrees * Time.deltaTime;
+        if (turnInput != 0.0f)
+        {
+            shipOrientationMode = ShipOrientationMode.Manual;
+            shipRotationDegrees += turnInput * shipTurnSpeedDegrees * Time.deltaTime;
+        }
+        else
+        {
+            UpdateAutoOrientation();
+        }
 
         float shipRotationRadians = shipRotationDegrees * Mathf.Deg2Rad;
         global::Vector2 shipForward = new global::Vector2(
@@ -226,12 +684,87 @@ public class SimulationRunner : MonoBehaviour
 
         if (keyboard.wKey != null && keyboard.wKey.isPressed)
         {
-            simulation.SetShipThrust(shipForward.Multiply(shipThrustAcceleration));
+            simulation.SetShipThrust(shipForward.Multiply(shipThrustForce));
         }
         else
         {
             simulation.SetShipThrust(global::Vector2.Zero());
         }
+    }
+
+    void UpdateOrientationModeInput(Keyboard keyboard)
+    {
+        if (WasPressed(keyboard.digit1Key, keyboard.numpad1Key))
+        {
+            shipOrientationMode = ShipOrientationMode.Manual;
+        }
+
+        if (WasPressed(keyboard.digit2Key, keyboard.numpad2Key))
+        {
+            shipOrientationMode = ShipOrientationMode.Prograde;
+        }
+
+        if (WasPressed(keyboard.digit3Key, keyboard.numpad3Key))
+        {
+            shipOrientationMode = ShipOrientationMode.Retrograde;
+        }
+
+        if (WasPressed(keyboard.digit4Key, keyboard.numpad4Key))
+        {
+            shipOrientationMode = ShipOrientationMode.Maneuver;
+        }
+    }
+
+    bool WasPressed(KeyControl primaryKey, KeyControl secondaryKey)
+    {
+        return
+            (primaryKey != null && primaryKey.wasPressedThisFrame) ||
+            (secondaryKey != null && secondaryKey.wasPressedThisFrame);
+    }
+
+    void UpdateAutoOrientation()
+    {
+        global::Vector2 targetDirection = GetAutoOrientationDirection();
+
+        if (targetDirection.LengthSquared() <= 0.000001)
+        {
+            return;
+        }
+
+        float targetAngleDegrees = Mathf.Atan2(
+            (float)targetDirection.y,
+            (float)targetDirection.x
+        ) * Mathf.Rad2Deg;
+        shipRotationDegrees = Mathf.MoveTowardsAngle(
+            shipRotationDegrees,
+            targetAngleDegrees,
+            shipAutoTurnSpeedDegrees * Time.deltaTime
+        );
+    }
+
+    global::Vector2 GetAutoOrientationDirection()
+    {
+        if (shipOrientationMode == ShipOrientationMode.Prograde)
+        {
+            return simulation.GetShipProgradeDirectionRelativeToActivePrimary();
+        }
+
+        if (shipOrientationMode == ShipOrientationMode.Retrograde)
+        {
+            return simulation.GetShipRetrogradeDirectionRelativeToActivePrimary();
+        }
+
+        if (shipOrientationMode == ShipOrientationMode.Maneuver)
+        {
+            global::Vector2 maneuverDirection = GetActivePlannedDeltaV();
+
+            if (maneuverDirection.LengthSquared() > 0.000001)
+            {
+                return maneuverDirection.Normalize();
+            }
+        }
+
+        return global::Vector2.Zero();
     }
 
     void UpdateManeuverInput()
@@ -247,50 +780,208 @@ public class SimulationRunner : MonoBehaviour
 
         if (keyboard.upArrowKey != null && keyboard.upArrowKey.wasPressedThisFrame)
         {
-            plannedDeltaV = plannedDeltaV.Add(
-                simulation
-                    .GetShipProgradeDirectionRelativeToActivePrimary()
-                    .Multiply(maneuverStep)
+            AddManeuverDeltaV(
+                GetPlanningProgradeDirection().Multiply(maneuverStep)
             );
         }
 
         if (keyboard.downArrowKey != null && keyboard.downArrowKey.wasPressedThisFrame)
         {
-            plannedDeltaV = plannedDeltaV.Add(
-                simulation
-                    .GetShipRetrogradeDirectionRelativeToActivePrimary()
-                    .Multiply(maneuverStep)
+            AddManeuverDeltaV(
+                GetPlanningRetrogradeDirection().Multiply(maneuverStep)
             );
         }
 
         if (keyboard.rightArrowKey != null && keyboard.rightArrowKey.wasPressedThisFrame)
         {
-            plannedDeltaV = plannedDeltaV.Add(
-                simulation
-                    .GetShipRadialOutDirectionRelativeToActivePrimary()
-                    .Multiply(maneuverStep)
+            AddManeuverDeltaV(
+                GetPlanningRadialOutDirection().Multiply(maneuverStep)
             );
         }
 
         if (keyboard.leftArrowKey != null && keyboard.leftArrowKey.wasPressedThisFrame)
         {
-            plannedDeltaV = plannedDeltaV.Add(
-                simulation
-                    .GetShipRadialInDirectionRelativeToActivePrimary()
-                    .Multiply(maneuverStep)
+            AddManeuverDeltaV(
+                GetPlanningRadialInDirection().Multiply(maneuverStep)
             );
+        }
+
+        if (keyboard.cKey != null && keyboard.cKey.wasPressedThisFrame)
+        {
+            AddManeuverDeltaV(GetPlanningCircularizeDeltaV());
+        }
+
+        if (keyboard.bKey != null && keyboard.bKey.wasPressedThisFrame)
+        {
+            StartAutoBurn();
         }
 
         if (keyboard.enterKey != null && keyboard.enterKey.wasPressedThisFrame)
         {
-            simulation.ApplyShipDeltaV(plannedDeltaV);
-            plannedDeltaV = global::Vector2.Zero();
+            ApplyOrWarpManeuver();
         }
 
         if (keyboard.backspaceKey != null && keyboard.backspaceKey.wasPressedThisFrame)
         {
-            plannedDeltaV = global::Vector2.Zero();
+            ClearManeuverPlan();
         }
+    }
+
+    void AddManeuverDeltaV(global::Vector2 deltaV)
+    {
+        if (hasManeuverNode)
+        {
+            maneuverNodeDeltaV = maneuverNodeDeltaV.Add(deltaV);
+            return;
+        }
+
+        plannedDeltaV = plannedDeltaV.Add(deltaV);
+    }
+
+    global::Vector2 GetPlanningProgradeDirection()
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetShipProgradeDirectionRelativeToActivePrimaryAtTime(
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetShipProgradeDirectionRelativeToActivePrimary();
+    }
+
+    global::Vector2 GetPlanningRetrogradeDirection()
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetShipRetrogradeDirectionRelativeToActivePrimaryAtTime(
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetShipRetrogradeDirectionRelativeToActivePrimary();
+    }
+
+    global::Vector2 GetPlanningRadialOutDirection()
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetShipRadialOutDirectionRelativeToActivePrimaryAtTime(
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetShipRadialOutDirectionRelativeToActivePrimary();
+    }
+
+    global::Vector2 GetPlanningRadialInDirection()
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetShipRadialInDirectionRelativeToActivePrimaryAtTime(
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetShipRadialInDirectionRelativeToActivePrimary();
+    }
+
+    global::Vector2 GetPlanningCircularizeDeltaV()
+    {
+        if (hasManeuverNode)
+        {
+            return simulation.GetShipCircularizeDeltaVRelativeToActivePrimaryAtTime(
+                maneuverNodeTime,
+                previewAnalysisDt
+            );
+        }
+
+        return simulation.GetShipCircularizeDeltaVRelativeToActivePrimary();
+    }
+
+    void ApplyOrWarpManeuver()
+    {
+        if (hasManeuverNode)
+        {
+            if (maneuverNodeTime > fixedDt * 2.0)
+            {
+                return;
+            }
+
+            simulation.ApplyShipDeltaV(maneuverNodeDeltaV);
+            ClearManeuverPlan();
+            return;
+        }
+
+        simulation.ApplyShipDeltaV(plannedDeltaV);
+        plannedDeltaV = global::Vector2.Zero();
+    }
+
+    void ClearManeuverPlan()
+    {
+        plannedDeltaV = global::Vector2.Zero();
+        maneuverNodeDeltaV = global::Vector2.Zero();
+        maneuverNodePosition = global::Vector2.Zero();
+        maneuverNodeTime = 0.0;
+        hasManeuverNode = false;
+        autoBurnActive = false;
+        autoBurnIsBurning = false;
+        autoBurnDuration = 0.0;
+        autoBurnRemainingTime = 0.0;
+        simulation.SetShipThrust(global::Vector2.Zero());
+    }
+
+    void UpdateAutoBurnThrustBeforeStep()
+    {
+        if (!autoBurnActive)
+        {
+            return;
+        }
+
+        if (!hasManeuverNode || maneuverNodeDeltaV.LengthSquared() <= 0.0)
+        {
+            ClearManeuverPlan();
+            return;
+        }
+
+        shipOrientationMode = ShipOrientationMode.Maneuver;
+
+        if (
+            autoBurnIsBurning ||
+            maneuverNodeTime <= fixedDt
+        )
+        {
+            autoBurnIsBurning = true;
+            simulation.SetShipThrust(
+                maneuverNodeDeltaV.Normalize().Multiply(shipThrustForce)
+            );
+            return;
+        }
+
+        simulation.SetShipThrust(global::Vector2.Zero());
+    }
+
+    void UpdateAutoBurnAfterStep(double dt)
+    {
+        if (!autoBurnActive || !autoBurnIsBurning)
+        {
+            return;
+        }
+
+        autoBurnRemainingTime -= dt;
+
+        if (autoBurnRemainingTime > 0.0)
+        {
+            return;
+        }
+
+        simulation.SetShipThrust(global::Vector2.Zero());
+        ClearManeuverPlan();
+        RebuildPreviewAnalysis();
     }
 
     double GetManeuverStep(Keyboard keyboard)
@@ -341,6 +1032,94 @@ public class SimulationRunner : MonoBehaviour
         if (keyboard.commaKey != null && keyboard.commaKey.wasPressedThisFrame)
         {
             DecreaseTimeScale();
+        }
+    }
+
+    void UpdateTargetInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+
+        if (keyboard == null)
+        {
+            return;
+        }
+
+        if (keyboard.tabKey != null && keyboard.tabKey.wasPressedThisFrame)
+        {
+            CycleTarget();
+        }
+
+        if (keyboard.vKey != null && keyboard.vKey.wasPressedThisFrame)
+        {
+            WarpToClosestApproach();
+        }
+
+        if (keyboard.zKey != null && keyboard.zKey.wasPressedThisFrame)
+        {
+            WarpToPeriapsis();
+        }
+
+        if (keyboard.xKey != null && keyboard.xKey.wasPressedThisFrame)
+        {
+            WarpToApoapsis();
+        }
+
+        if (keyboard.nKey != null && keyboard.nKey.wasPressedThisFrame)
+        {
+            SetManeuverNodeAtApoapsis();
+        }
+    }
+
+    void CycleTarget()
+    {
+        if (simulation == null || targetBodyNames.Length == 0)
+        {
+            return;
+        }
+
+        int startIndex = FindTargetIndex();
+
+        for (int offset = 1; offset <= targetBodyNames.Length; offset++)
+        {
+            int nextIndex = (startIndex + offset) % targetBodyNames.Length;
+            string nextTargetBodyName = targetBodyNames[nextIndex];
+
+            if (simulation.HasBody(nextTargetBodyName))
+            {
+                targetBodyName = nextTargetBodyName;
+                RebuildPreviewAnalysis();
+                return;
+            }
+        }
+    }
+
+    int FindTargetIndex()
+    {
+        for (int i = 0; i < targetBodyNames.Length; i++)
+        {
+            if (targetBodyNames[i] == targetBodyName)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    void EnsureValidTarget()
+    {
+        if (simulation == null || simulation.HasBody(targetBodyName))
+        {
+            return;
+        }
+
+        for (int i = 0; i < targetBodyNames.Length; i++)
+        {
+            if (simulation.HasBody(targetBodyNames[i]))
+            {
+                targetBodyName = targetBodyNames[i];
+                return;
+            }
         }
     }
 
@@ -420,9 +1199,25 @@ public class SimulationRunner : MonoBehaviour
                 );
                 BodyView.UpdatePlannedDeltaV(
                     bodyObjects[bodyState.name],
-                    plannedDeltaV
+                    GetActivePlannedDeltaV()
                 );
             }
+        }
+    }
+
+    void ClearShipTrail()
+    {
+        if (!bodyObjects.ContainsKey("Ship"))
+        {
+            return;
+        }
+
+        ShipTrailView shipTrailView =
+            bodyObjects["Ship"].GetComponent<ShipTrailView>();
+
+        if (shipTrailView != null)
+        {
+            shipTrailView.Clear();
         }
     }
 
@@ -443,6 +1238,17 @@ public class SimulationRunner : MonoBehaviour
         }
 
         cameraController.SetTarget(bodyObjects["Ship"].transform);
+
+        StarfieldBackground starfieldBackground =
+            Camera.main.GetComponent<StarfieldBackground>();
+
+        if (starfieldBackground == null)
+        {
+            starfieldBackground =
+                Camera.main.gameObject.AddComponent<StarfieldBackground>();
+        }
+
+        starfieldBackground.Setup(Camera.main);
     }
 
     void SetupHud()

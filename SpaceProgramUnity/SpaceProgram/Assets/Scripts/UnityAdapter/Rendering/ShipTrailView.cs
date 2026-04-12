@@ -44,4 +44,14 @@ public class ShipTrailView : MonoBehaviour
         lineRenderer.positionCount = points.Count;
         lineRenderer.SetPositions(points.ToArray());
     }
+
+    public void Clear()
+    {
+        points.Clear();
+
+        if (lineRenderer != null)
+        {
+            lineRenderer.positionCount = 0;
+        }
+    }
 }

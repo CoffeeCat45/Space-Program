@@ -2,12 +2,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build TestApp",
+            "label": "build SimulationConsole",
             "type": "shell",
             "command": "dotnet",
             "args": [
                 "build",
-                "${workspaceFolder}/TestApp/TestApp.csproj",
+                "${workspaceFolder}/SimulationConsole/SimulationConsole.csproj",
                 "/property:GenerateFullPaths=true"
             ],
             "group": {
@@ -17,13 +17,13 @@
             "problemMatcher": "$msCompile"
         },
         {
-            "label": "run TestApp",
+            "label": "run SimulationConsole",
             "type": "shell",
             "command": "dotnet",
             "args": [
                 "run",
                 "--project",
-                "${workspaceFolder}/TestApp/TestApp.csproj"
+                "${workspaceFolder}/SimulationConsole/SimulationConsole.csproj"
             ],
             "group": "test",
             "problemMatcher": "$msCompile"

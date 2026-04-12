@@ -473,6 +473,8 @@ MonoBehaviour:
   previewAnalysisStepCount: 1500
   previewAnalysisDt: 0.2
   previewAnalysisUpdateInterval: 0.5
+  warpToPointTimeScale: 50
+  targetBodyName: Moon
 --- !u!4 &1012111197
 Transform:
   m_ObjectHideFlags: 0
