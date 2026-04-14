@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 class Simulation
 {
+    const double OrbitPathNearCircularEccentricity = 0.001;
+
     public Body planet;
     public Body moon;
     public Vessel ship;
@@ -35,6 +37,7 @@ class Simulation
         );
 
         double moonOrbitRadius = 650;
+        double moonSphereOfInfluenceReferenceRadius = moonOrbitRadius;
         Vector2 moonStartPosition = new Vector2(moonOrbitRadius, 0);
         double moonStartRadius = planet.position.Subtract(moonStartPosition).Length();
         moonCircularSpeedAtStart = Gravity.CalculateCircularOrbitSpeed(
@@ -58,6 +61,26 @@ class Simulation
             ).Multiply(moonCircularSpeedAtStart);
         }
 
+        if (scenario == SimulationScenario.PlanetMoonEllipticMoon)
+        {
+            double moonOrbitSemiMajorAxis = moonOrbitRadius;
+            double moonOrbitEccentricity = 0.12;
+            double moonPeriapsisRadius =
+                moonOrbitSemiMajorAxis * (1.0 - moonOrbitEccentricity);
+            double moonPeriapsisSpeed = Math.Sqrt(
+                planet.mu *
+                (
+                    (2.0 / moonPeriapsisRadius) -
+                    (1.0 / moonOrbitSemiMajorAxis)
+                )
+            );
+
+            moonStartPosition = new Vector2(moonPeriapsisRadius, 0);
+            moonStartVelocity = new Vector2(0, moonPeriapsisSpeed);
+            moonStartRadius = moonPeriapsisRadius;
+            moonSphereOfInfluenceReferenceRadius = moonOrbitSemiMajorAxis;
+        }
+
         moon = new Body(
             "Moon",
             moonStartPosition,
@@ -68,7 +91,7 @@ class Simulation
             false
         );
         moonSphereOfInfluenceRadius = CalculateSphereOfInfluenceRadius(
-            moonStartRadius,
+            moonSphereOfInfluenceReferenceRadius,
             moon.mu,
             planet.mu
         );
@@ -103,8 +126,7 @@ class Simulation
         );
 
         if (
-            scenario == SimulationScenario.PlanetMoonShip ||
-            scenario == SimulationScenario.MoonFlyby
+            ScenarioHasMoon()
         )
         {
             bodies = new Body[]
@@ -142,6 +164,14 @@ class Simulation
         ship.velocity = ship.velocity.Add(deltaV);
     }
 
+    bool ScenarioHasMoon()
+    {
+        return
+            scenario == SimulationScenario.PlanetMoonShip ||
+            scenario == SimulationScenario.PlanetMoonEllipticMoon ||
+            scenario == SimulationScenario.MoonFlyby;
+    }
+
     public Simulation CreateCopy()
     {
         Simulation copy = new Simulation(scenario);
@@ -151,8 +181,7 @@ class Simulation
         copy.ship = CopyVessel(ship);
 
         if (
-            scenario == SimulationScenario.PlanetMoonShip ||
-            scenario == SimulationScenario.MoonFlyby
+            ScenarioHasMoon()
         )
         {
             copy.bodies = new Body[]
@@ -273,27 +302,214 @@ class Simulation
         double burnDuration,
         int pointCount,
         double maneuverTime,
-        double dt
+        double coastDt,
+        double burnDt
     )
     {
         if (plannedDeltaV.LengthSquared() <= 0.0 || thrustForce <= 0.0)
         {
-            return GetPreviewShipOrbitPathRelativeToActivePrimary(
-                plannedDeltaV,
-                pointCount,
-                maneuverTime,
-                dt
-            );
+            Simulation coastPreview = CreateCopy();
+            coastPreview.ship.thrust = Vector2.Zero();
+            AdvancePreviewToTime(coastPreview, maneuverTime, coastDt);
+            return coastPreview.GetShipOrbitPathRelativeToActivePrimary(pointCount);
         }
 
         Simulation preview = CreateCopy();
         preview.ship.thrust = Vector2.Zero();
-        AdvancePreviewToTime(preview, maneuverTime, dt);
+        AdvancePreviewToTime(preview, maneuverTime, coastDt);
         preview.ship.thrust = plannedDeltaV.Normalize().Multiply(thrustForce);
-        AdvancePreviewToTime(preview, burnDuration, dt);
+        AdvancePreviewToTime(preview, burnDuration, burnDt);
         preview.ship.thrust = Vector2.Zero();
 
         return preview.GetShipOrbitPathRelativeToActivePrimary(pointCount);
+    }
+
+    public double GetFiniteBurnPreviewShipOrbitalPeriodRelativeToActivePrimary(
+        Vector2 plannedDeltaV,
+        double thrustForce,
+        double burnDuration,
+        double maneuverTime,
+        double coastDt,
+        double burnDt
+    )
+    {
+        Simulation preview = CreateCopy();
+        preview.ship.thrust = Vector2.Zero();
+        AdvancePreviewToTime(preview, maneuverTime, coastDt);
+
+        if (
+            plannedDeltaV.LengthSquared() > 0.0 &&
+            thrustForce > 0.0 &&
+            burnDuration > 0.0
+        )
+        {
+            preview.ship.thrust = plannedDeltaV
+                .Normalize()
+                .Multiply(thrustForce);
+            AdvancePreviewToTime(preview, burnDuration, burnDt);
+            preview.ship.thrust = Vector2.Zero();
+        }
+
+        return preview.GetShipOrbitalPeriodRelativeToActivePrimary();
+    }
+
+    public double EstimateShipBurnDurationForDeltaV(
+        Vector2 deltaV,
+        double thrustForce
+    )
+    {
+        double deltaVLength = deltaV.Length();
+
+        if (deltaVLength <= 0.0)
+        {
+            return 0.0;
+        }
+
+        if (thrustForce <= 0.0 || ship.GetMass() <= 0.0)
+        {
+            return double.PositiveInfinity;
+        }
+
+        double fuelRate =
+            thrustForce * ship.fuelConsumptionPerForceSecond;
+
+        if (fuelRate <= 0.0)
+        {
+            return deltaVLength / (thrustForce / ship.GetMass());
+        }
+
+        double startMass = ship.GetMass();
+        double endMassAfterRequestedDeltaV =
+            startMass / Math.Exp(
+                deltaVLength * ship.fuelConsumptionPerForceSecond
+            );
+        double lowestPossibleMass = ship.dryMass;
+
+        if (endMassAfterRequestedDeltaV < lowestPossibleMass)
+        {
+            endMassAfterRequestedDeltaV = lowestPossibleMass;
+        }
+
+        double fuelToBurn = startMass - endMassAfterRequestedDeltaV;
+
+        if (fuelToBurn <= 0.0)
+        {
+            return 0.0;
+        }
+
+        if (fuelToBurn > ship.fuelMass)
+        {
+            fuelToBurn = ship.fuelMass;
+        }
+
+        return fuelToBurn / fuelRate;
+    }
+
+    public double GetShipAvailableDeltaV()
+    {
+        double currentMass = ship.GetMass();
+
+        if (
+            currentMass <= 0.0 ||
+            ship.dryMass <= 0.0 ||
+            currentMass <= ship.dryMass ||
+            ship.fuelConsumptionPerForceSecond <= 0.0
+        )
+        {
+            return 0.0;
+        }
+
+        return Math.Log(currentMass / ship.dryMass) /
+            ship.fuelConsumptionPerForceSecond;
+    }
+
+    Vector2 ClampDeltaVToAvailableFuel(Vector2 deltaV)
+    {
+        double deltaVLength = deltaV.Length();
+        double availableDeltaV = GetShipAvailableDeltaV();
+
+        if (
+            deltaVLength <= 0.0 ||
+            availableDeltaV <= 0.0 ||
+            deltaVLength <= availableDeltaV
+        )
+        {
+            return deltaV;
+        }
+
+        return deltaV.Normalize().Multiply(availableDeltaV);
+    }
+
+    public Vector2 GetFiniteBurnCircularizeDeltaVRelativeToActivePrimary(
+        double thrustForce,
+        double circularizeTime,
+        double burnStartTime,
+        double coastDt,
+        double burnDt,
+        int iterationCount
+    )
+    {
+        Simulation circularizePreview = CreateCopy();
+        circularizePreview.ship.thrust = Vector2.Zero();
+        AdvancePreviewToTime(circularizePreview, circularizeTime, coastDt);
+        string primaryBodyName =
+            circularizePreview.GetActivePrimaryBody().name;
+        Body circularizePrimaryBody =
+            circularizePreview.GetBodyByName(primaryBodyName);
+        Vector2 candidateDeltaV =
+            circularizePreview.GetShipCircularizeDeltaVRelativeToBody(
+                circularizePrimaryBody
+            );
+
+        if (
+            candidateDeltaV.LengthSquared() <= 0.0 ||
+            thrustForce <= 0.0 ||
+            iterationCount <= 0
+        )
+        {
+            return candidateDeltaV;
+        }
+
+        for (int i = 0; i < iterationCount; i++)
+        {
+            Simulation preview = CreateCopy();
+            preview.ship.thrust = Vector2.Zero();
+            AdvancePreviewToTime(preview, burnStartTime, coastDt);
+
+            double burnDuration = preview.EstimateShipBurnDurationForDeltaV(
+                candidateDeltaV,
+                thrustForce
+            );
+
+            if (
+                burnDuration <= 0.0 ||
+                double.IsInfinity(burnDuration) ||
+                double.IsNaN(burnDuration)
+            )
+            {
+                break;
+            }
+
+            preview.ship.thrust =
+                candidateDeltaV.Normalize().Multiply(thrustForce);
+            AdvancePreviewToTime(preview, burnDuration, burnDt);
+            preview.ship.thrust = Vector2.Zero();
+
+            Vector2 remainingDeltaV =
+                preview.GetShipCircularizeDeltaVRelativeToBody(
+                    preview.GetBodyByName(primaryBodyName)
+                );
+
+            if (remainingDeltaV.LengthSquared() < 0.000001)
+            {
+                break;
+            }
+
+            candidateDeltaV = candidateDeltaV.Add(remainingDeltaV);
+            candidateDeltaV = ClampDeltaVToAvailableFuel(candidateDeltaV);
+        }
+
+        return ClampDeltaVToAvailableFuel(candidateDeltaV);
     }
 
     public ClosestApproachInfo GetClosestApproachToMoon(
@@ -329,6 +545,29 @@ class Simulation
         double maneuverTime
     )
     {
+        return GetClosestApproachToBody(
+            targetBodyName,
+            plannedDeltaV,
+            stepCount,
+            dt,
+            maneuverTime,
+            0.0,
+            0.0,
+            dt
+        );
+    }
+
+    public ClosestApproachInfo GetClosestApproachToBody(
+        string targetBodyName,
+        Vector2 plannedDeltaV,
+        int stepCount,
+        double dt,
+        double maneuverTime,
+        double thrustForce,
+        double burnDuration,
+        double burnDt
+    )
+    {
         if (!HasBody(targetBodyName) || targetBodyName == ship.name)
         {
             return ClosestApproachInfo.None();
@@ -337,13 +576,6 @@ class Simulation
         Simulation preview = CreateCopy();
         preview.ship.thrust = Vector2.Zero();
         Body targetBody = preview.GetBodyByName(targetBodyName);
-        bool didApplyManeuver = false;
-
-        if (maneuverTime <= 0.0)
-        {
-            preview.ApplyShipDeltaV(plannedDeltaV);
-            didApplyManeuver = true;
-        }
 
         double closestDistance = double.PositiveInfinity;
         double closestTime = 0;
@@ -356,12 +588,6 @@ class Simulation
         for (int i = 0; i <= stepCount; i++)
         {
             double previewTime = i * dt;
-
-            if (!didApplyManeuver && previewTime >= maneuverTime)
-            {
-                preview.ApplyShipDeltaV(plannedDeltaV);
-                didApplyManeuver = true;
-            }
 
             double distance = targetBody.position
                 .Subtract(preview.ship.position)
@@ -378,7 +604,16 @@ class Simulation
                     .Length();
             }
 
-            preview.Update(dt);
+            AdvancePreviewWithFiniteBurn(
+                preview,
+                plannedDeltaV,
+                thrustForce,
+                burnDuration,
+                maneuverTime,
+                previewTime,
+                dt,
+                burnDt
+            );
         }
 
         return new ClosestApproachInfo(
@@ -415,23 +650,34 @@ class Simulation
         double maneuverTime
     )
     {
-        if (
-            scenario != SimulationScenario.PlanetMoonShip &&
-            scenario != SimulationScenario.MoonFlyby
-        )
+        return GetMoonSphereOfInfluenceEntryPreview(
+            plannedDeltaV,
+            stepCount,
+            dt,
+            maneuverTime,
+            0.0,
+            0.0,
+            dt
+        );
+    }
+
+    public SphereOfInfluenceEntryPreview GetMoonSphereOfInfluenceEntryPreview(
+        Vector2 plannedDeltaV,
+        int stepCount,
+        double dt,
+        double maneuverTime,
+        double thrustForce,
+        double burnDuration,
+        double burnDt
+    )
+    {
+        if (!ScenarioHasMoon())
         {
             return SphereOfInfluenceEntryPreview.None();
         }
 
         Simulation preview = CreateCopy();
         preview.ship.thrust = Vector2.Zero();
-        bool didApplyManeuver = false;
-
-        if (maneuverTime <= 0.0)
-        {
-            preview.ApplyShipDeltaV(plannedDeltaV);
-            didApplyManeuver = true;
-        }
 
         List<Vector2> points = new List<Vector2>();
         Vector2 previousShipPosition = preview.ship.position;
@@ -461,13 +707,16 @@ class Simulation
         {
             double previewTime = (i - 1) * dt;
 
-            if (!didApplyManeuver && previewTime >= maneuverTime)
-            {
-                preview.ApplyShipDeltaV(plannedDeltaV);
-                didApplyManeuver = true;
-            }
-
-            preview.Update(dt);
+            AdvancePreviewWithFiniteBurn(
+                preview,
+                plannedDeltaV,
+                thrustForce,
+                burnDuration,
+                maneuverTime,
+                previewTime,
+                dt,
+                burnDt
+            );
 
             double distanceToMoon = preview.GetShipDistanceToMoon();
 
@@ -571,6 +820,65 @@ class Simulation
         }
     }
 
+    void AdvancePreviewWithFiniteBurn(
+        Simulation preview,
+        Vector2 plannedDeltaV,
+        double thrustForce,
+        double burnDuration,
+        double maneuverTime,
+        double previewTime,
+        double stepDt,
+        double burnDt
+    )
+    {
+        double remainingTime = stepDt;
+        double currentTime = previewTime;
+        bool canBurn =
+            plannedDeltaV.LengthSquared() > 0.0 &&
+            thrustForce > 0.0 &&
+            burnDuration > 0.0;
+        double burnEndTime = maneuverTime + burnDuration;
+
+        while (remainingTime > 0.0)
+        {
+            bool isBurning =
+                canBurn &&
+                currentTime >= maneuverTime &&
+                currentTime < burnEndTime;
+            double subStep = remainingTime;
+
+            if (canBurn && currentTime < maneuverTime)
+            {
+                subStep = Math.Min(subStep, maneuverTime - currentTime);
+            }
+
+            if (isBurning)
+            {
+                subStep = Math.Min(subStep, burnEndTime - currentTime);
+
+                if (burnDt > 0.0)
+                {
+                    subStep = Math.Min(subStep, burnDt);
+                }
+            }
+
+            if (subStep <= 0.0)
+            {
+                subStep = remainingTime;
+            }
+
+            preview.ship.thrust = isBurning ?
+                plannedDeltaV.Normalize().Multiply(thrustForce) :
+                Vector2.Zero();
+            preview.Update(subStep);
+
+            currentTime += subStep;
+            remainingTime -= subStep;
+        }
+
+        preview.ship.thrust = Vector2.Zero();
+    }
+
     Vector2[] GetOrbitPathRelativeToBody(
         Body primaryBody,
         Vector2 orbitingPosition,
@@ -615,8 +923,12 @@ class Simulation
             return Array.Empty<Vector2>();
         }
 
+        double pathEccentricity =
+            eccentricity < OrbitPathNearCircularEccentricity ?
+            0.0 :
+            eccentricity;
         Vector2 periapsisDirection =
-            eccentricity > 0.000001 ?
+            pathEccentricity > 0.0 ?
             eccentricityVector.Normalize() :
             relativePosition.Normalize();
         Vector2 sideDirection = new Vector2(
@@ -631,7 +943,7 @@ class Simulation
 
         List<Vector2> points = new List<Vector2>();
 
-        if (eccentricity < 1.0)
+        if (pathEccentricity < 1.0)
         {
             for (int i = 0; i <= pointCount; i++)
             {
@@ -643,16 +955,16 @@ class Simulation
                     periapsisDirection,
                     sideDirection,
                     semiLatusRectum,
-                    eccentricity,
+                    pathEccentricity,
                     trueAnomaly
                 );
             }
         }
         else
         {
-            double maxTrueAnomaly = eccentricity == 1.0 ?
+            double maxTrueAnomaly = pathEccentricity == 1.0 ?
                 Math.PI * 0.85 :
-                Math.Acos(-1.0 / eccentricity) * 0.92;
+                Math.Acos(-1.0 / pathEccentricity) * 0.92;
 
             for (int i = 0; i < pointCount; i++)
             {
@@ -667,7 +979,7 @@ class Simulation
                     periapsisDirection,
                     sideDirection,
                     semiLatusRectum,
-                    eccentricity,
+                    pathEccentricity,
                     trueAnomaly
                 );
             }
@@ -758,10 +1070,7 @@ class Simulation
 
         ApplyShipThrust(dt);
 
-        if (
-            scenario == SimulationScenario.PlanetMoonShip ||
-            scenario == SimulationScenario.MoonFlyby
-        )
+        if (ScenarioHasMoon())
         {
             lastMoonGravityAcceleration = newAccelerations[1];
             lastGravityAcceleration = newAccelerations[2];
@@ -906,10 +1215,7 @@ class Simulation
     // GetActivePrimaryBody = получить текущее главное тело для орбитальной аналитики.
     Body GetActivePrimaryBody()
     {
-        if (
-            scenario == SimulationScenario.PlanetMoonShip ||
-            scenario == SimulationScenario.MoonFlyby
-        )
+        if (ScenarioHasMoon())
         {
             double distanceToMoon = GetShipDistanceToMoon();
 
@@ -1002,10 +1308,7 @@ class Simulation
     // GetMoonSpeed = получить скорость луны.
     public double GetMoonSpeed()
     {
-        if (
-            scenario != SimulationScenario.PlanetMoonShip &&
-            scenario != SimulationScenario.MoonFlyby
-        )
+        if (!ScenarioHasMoon())
         {
             return 0;
         }
@@ -1022,10 +1325,7 @@ class Simulation
     // GetShipDistanceToMoon = получить расстояние от корабля до луны.
     public double GetShipDistanceToMoon()
     {
-        if (
-            scenario != SimulationScenario.PlanetMoonShip &&
-            scenario != SimulationScenario.MoonFlyby
-        )
+        if (!ScenarioHasMoon())
         {
             return 0;
         }
@@ -1088,10 +1388,7 @@ class Simulation
     // GetMoonDistanceToPlanet = получить расстояние от луны до планеты.
     public double GetMoonDistanceToPlanet()
     {
-        if (
-            scenario != SimulationScenario.PlanetMoonShip &&
-            scenario != SimulationScenario.MoonFlyby
-        )
+        if (!ScenarioHasMoon())
         {
             return 0;
         }
@@ -1184,7 +1481,11 @@ class Simulation
 
     public Vector2 GetShipCircularizeDeltaVRelativeToActivePrimary()
     {
-        Body activePrimaryBody = GetActivePrimaryBody();
+        return GetShipCircularizeDeltaVRelativeToBody(GetActivePrimaryBody());
+    }
+
+    Vector2 GetShipCircularizeDeltaVRelativeToBody(Body activePrimaryBody)
+    {
         Vector2 relativePosition = ship.position.Subtract(activePrimaryBody.position);
         Vector2 relativeVelocity = ship.velocity.Subtract(activePrimaryBody.velocity);
         double radius = relativePosition.Length();

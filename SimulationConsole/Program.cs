@@ -10,8 +10,14 @@ class Program
     const double ManualThrustPower = 1.0; // Сила ручного thrust для одного кадра.
     const double ManualImpulseDeltaV = 0.5; // Величина одного импульса delta-v.
 
-    static void Main()
+    static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "stability")
+        {
+            RunStabilityReport();
+            return;
+        }
+
         RunVisualization(SimulationScenario.MoonFlyby);
         // RunOrbitTest(SimulationScenario.TwoBodyCircular);
         // RunOrbitTest(SimulationScenario.PlanetMoonShip);
@@ -30,6 +36,84 @@ class Program
     }
 
     // RunOrbitTest = запустить длинный тест орбиты без отрисовки.
+    static void RunStabilityReport()
+    {
+        RunStabilityCase("planet circular", CreatePlanetCircularTest(), 0.02, 100000);
+        RunStabilityCase("moon circular", CreateMoonCircularTest(), 0.02, 100000);
+    }
+
+    static Simulation CreatePlanetCircularTest()
+    {
+        return new Simulation(SimulationScenario.TwoBodyCircular);
+    }
+
+    static Simulation CreateMoonCircularTest()
+    {
+        Simulation simulation = new Simulation(SimulationScenario.MoonFlyby);
+        double orbitRadius = 60.0;
+        double circularSpeed = Gravity.CalculateCircularOrbitSpeed(
+            simulation.moon.mu,
+            orbitRadius
+        );
+
+        simulation.ship.position = simulation.moon.position.Add(
+            new Vector2(orbitRadius, 0.0)
+        );
+        simulation.ship.velocity = simulation.moon.velocity.Add(
+            new Vector2(0.0, circularSpeed)
+        );
+        simulation.ship.thrust = Vector2.Zero();
+        simulation.ship.thrustAcceleration = Vector2.Zero();
+        simulation.activePrimaryBodyName = "Moon";
+
+        return simulation;
+    }
+
+    static void RunStabilityCase(
+        string label,
+        Simulation simulation,
+        double dt,
+        int steps
+    )
+    {
+        double minDistance = simulation.GetShipDistanceToActivePrimary();
+        double maxDistance = minDistance;
+
+        for (int step = 0; step < steps; step++)
+        {
+            simulation.Update(dt);
+            double distance = simulation.GetShipDistanceToActivePrimary();
+
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+            }
+
+            if (distance > maxDistance)
+            {
+                maxDistance = distance;
+            }
+        }
+
+        Console.WriteLine(label);
+        Console.WriteLine("  active primary: " + simulation.activePrimaryBodyName);
+        Console.WriteLine("  min distance: " + minDistance);
+        Console.WriteLine("  max distance: " + maxDistance);
+        Console.WriteLine("  spread: " + (maxDistance - minDistance));
+        Console.WriteLine(
+            "  eccentricity: " +
+            simulation.GetShipOrbitalEccentricityRelativeToActivePrimary()
+        );
+        Console.WriteLine(
+            "  periapsis: " +
+            simulation.GetShipPeriapsisRelativeToActivePrimary()
+        );
+        Console.WriteLine(
+            "  apoapsis: " +
+            simulation.GetShipApoapsisRelativeToActivePrimary()
+        );
+    }
+
     static void RunOrbitTest(SimulationScenario scenario)
     {
         double dt = 0.1;

@@ -96,11 +96,12 @@ public class SimulationHud : MonoBehaviour
         GUILayout.Space(8);
         GUILayout.Label("H: details  Tab: target  C: circularize", labelStyle);
         GUILayout.Label("1: manual  2: prograde  3: retrograde  4: maneuver", labelStyle);
-        GUILayout.Label("V: warp to CA  Z: Pe  X: Ap", labelStyle);
+        GUILayout.Label("V: warp to CA  J: Pe  K: Ap", labelStyle);
         GUILayout.Label("RMB: warp to maneuver start", labelStyle);
         GUILayout.Label("Enter near node: apply  Backspace: clear", labelStyle);
         GUILayout.Label("Arrows: maneuver  B: auto-burn", labelStyle);
-        GUILayout.Label(", / .: time  P / Space: pause", labelStyle);
+        GUILayout.Label("Shift/Ctrl: throttle  Z: max  X: cut", labelStyle);
+        GUILayout.Label(", / .: time x0.25..x100  P / Space: pause", labelStyle);
         GUILayout.EndArea();
     }
 
@@ -158,32 +159,16 @@ public class SimulationHud : MonoBehaviour
             labelStyle
         );
         GUILayout.Label(
-            "Planned delta-v: " + FormatNumber(plannedDeltaV.Length()),
-            labelStyle
-        );
-        GUILayout.Label(
             "Thrust accel: " +
             FormatNumber(simulation.GetShipThrustAcceleration()),
             labelStyle
         );
+        GUILayout.Label(
+            "Throttle: " + FormatPercent(runner.GetThrottle()),
+            labelStyle
+        );
 
-        if (runner.HasManeuverNode())
-        {
-            GUILayout.Label(
-                "Maneuver node: T+" +
-                FormatTime(runner.GetManeuverNodeTime()) +
-                "  dv " +
-                FormatNumber(runner.GetManeuverNodeDeltaV().Length()),
-                labelStyle
-            );
-            GUILayout.Label(
-                "Burn: " +
-                FormatTime(runner.GetEstimatedManeuverBurnDuration()) +
-                "  start T+" +
-                FormatTime(runner.GetTimeToManeuverBurnStart()),
-                labelStyle
-            );
-        }
+        DrawManeuverHud(plannedDeltaV);
 
         if (runner.IsAutoBurnActive())
         {
@@ -225,6 +210,79 @@ public class SimulationHud : MonoBehaviour
         }
     }
 
+    void DrawManeuverHud(global::Vector2 plannedDeltaV)
+    {
+        double plannedDeltaVLength = plannedDeltaV.Length();
+        double availableDeltaV = simulation.GetShipAvailableDeltaV();
+        double burnDuration = runner.GetPlannedBurnDuration();
+
+        GUILayout.Space(6);
+        GUILayout.Label("Maneuver", labelStyle);
+        GUILayout.Label(
+            "Planned delta-v: " +
+            FormatNumber(plannedDeltaVLength) +
+            "  Available: " +
+            FormatNumber(availableDeltaV),
+            labelStyle
+        );
+
+        if (plannedDeltaVLength <= 0.0)
+        {
+            GUILayout.Label("Node: none", labelStyle);
+            return;
+        }
+
+        GUILayout.Label(
+            "Burn duration: " +
+            FormatTime(burnDuration) +
+            "  burn start T+" +
+            FormatTime(runner.GetPlannedBurnStartTime()),
+            labelStyle
+        );
+
+        if (runner.HasManeuverNode())
+        {
+            GUILayout.Label(
+                "Node time T+" +
+                FormatTime(runner.GetManeuverNodeTime()) +
+                "  node dv " +
+                FormatNumber(runner.GetManeuverNodeDeltaV().Length()),
+                labelStyle
+            );
+        }
+        else
+        {
+            GUILayout.Label("Node time T+0.0s  immediate plan", labelStyle);
+        }
+
+        if (plannedDeltaVLength > availableDeltaV)
+        {
+            GUILayout.Label("Warning: not enough fuel for maneuver", labelStyle);
+        }
+
+        if (IsLongBurn(burnDuration))
+        {
+            GUILayout.Label("Warning: long burn, result can drift", labelStyle);
+        }
+    }
+
+    bool IsLongBurn(double burnDuration)
+    {
+        double orbitalPeriod = simulation.GetShipOrbitalPeriodRelativeToActivePrimary();
+
+        if (
+            burnDuration <= 0.0 ||
+            double.IsInfinity(burnDuration) ||
+            double.IsInfinity(orbitalPeriod) ||
+            orbitalPeriod <= 0.0
+        )
+        {
+            return false;
+        }
+
+        return burnDuration > orbitalPeriod * 0.08;
+    }
+
     void DrawDetails(
         global::Vector2 plannedDeltaV,
         ClosestApproachInfo closestApproach
@@ -259,11 +317,7 @@ public class SimulationHud : MonoBehaviour
         );
         GUILayout.Label(
             "Delta-v step: " +
-            FormatNumber(runner.plannedDeltaVStep) +
-            " / Ctrl " +
-            FormatNumber(runner.GetFineManeuverStep()) +
-            " / Shift " +
-            FormatNumber(runner.GetCoarseManeuverStep()),
+            FormatNumber(runner.plannedDeltaVStep),
             labelStyle
         );
 
@@ -278,38 +332,9 @@ public class SimulationHud : MonoBehaviour
                 return;
             }
 
+            GUILayout.Label("Preview orbit: finite burn", labelStyle);
             GUILayout.Label(
-                "Preview orbit: " +
-                simulation.GetPreviewShipOrbitTypeRelativeToActivePrimary(
-                    plannedDeltaV
-                ),
-                labelStyle
-            );
-            GUILayout.Label(
-                "Preview eccentricity: " +
-                FormatNumber(
-                    simulation.GetPreviewShipOrbitalEccentricityRelativeToActivePrimary(
-                        plannedDeltaV
-                    )
-                ),
-                labelStyle
-            );
-            GUILayout.Label(
-                "Preview periapsis alt: " +
-                FormatNumber(
-                    simulation.GetPreviewShipPeriapsisAltitudeRelativeToActivePrimary(
-                        plannedDeltaV
-                    )
-                ),
-                labelStyle
-            );
-            GUILayout.Label(
-                "Preview apoapsis alt: " +
-                FormatNumber(
-                    simulation.GetPreviewShipApoapsisAltitudeRelativeToActivePrimary(
-                        plannedDeltaV
-                    )
-                ),
+                "Preview period: " + FormatTime(runner.GetPlannedOrbitPeriod()),
                 labelStyle
             );
         }

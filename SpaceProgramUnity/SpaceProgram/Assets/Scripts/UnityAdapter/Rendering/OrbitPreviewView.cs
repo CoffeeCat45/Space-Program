@@ -21,6 +21,7 @@ public class OrbitPreviewView : MonoBehaviour
     public float maneuverHandleWidth = 0.045f;
     public float maneuverNodePickRadiusPixels = 20.0f;
     public float maneuverNodeDragRadiusPixels = 180.0f;
+    public double nearCircularMarkerEccentricity = 0.001;
 
     Simulation simulation;
     SimulationRunner runner;
@@ -55,6 +56,7 @@ public class OrbitPreviewView : MonoBehaviour
     Vector3[] hoverPredictionWorldPoints = Array.Empty<Vector3>();
     double[] hoverPredictionTimes = Array.Empty<double>();
     Vector3 hoveredOrbitPointPosition;
+    Vector3 warpMenuWorldPosition;
     double hoveredOrbitPointTime;
     Vector3 maneuverNodeWorldPosition;
     UnityEngine.Vector2 hoverGuiPosition;
@@ -218,13 +220,15 @@ public class OrbitPreviewView : MonoBehaviour
             simulation.GetActivePrimaryRadius(),
             simulation.GetShipOrbitTypeRelativeToActivePrimary() == "Ellipse"
         );
-        UpdateHoverPrediction(
-            hasManeuverNode ? global::Vector2.Zero() : plannedDeltaV
-        );
         UpdateManeuverNodePoint();
 
         SphereOfInfluenceEntryPreview sphereOfInfluenceEntryPreview =
             UpdateSphereOfInfluenceEntryPreview();
+        UpdateHoverPredictionForVisiblePath(
+            hasManeuverNode,
+            plannedDeltaV,
+            sphereOfInfluenceEntryPreview
+        );
         UpdateClosestApproachMarker();
         UpdateClosestApproachPoint(
             sphereOfInfluenceEntryPreview.entersSphereOfInfluence
@@ -253,7 +257,32 @@ public class OrbitPreviewView : MonoBehaviour
             plannedOrbitPoints,
             simulation.GetActivePrimaryPosition(),
             simulation.GetActivePrimaryRadius(),
-            simulation.GetPreviewShipOrbitTypeRelativeToActivePrimary(plannedDeltaV) == "Ellipse"
+            !double.IsInfinity(runner.GetPlannedOrbitPeriod())
+        );
+    }
+
+    void UpdateHoverPredictionForVisiblePath(
+        bool hasManeuverNode,
+        global::Vector2 plannedDeltaV,
+        SphereOfInfluenceEntryPreview sphereOfInfluenceEntryPreview
+    )
+    {
+        if (
+            plannedDeltaV.LengthSquared() > 0.0 &&
+            sphereOfInfluenceEntryPreview.entersSphereOfInfluence
+        )
+        {
+            hoverPredictionWorldPoints =
+                ToWorldPositions(sphereOfInfluenceEntryPreview.pathPoints);
+            hoverPredictionTimes = BuildLinearPredictionTimes(
+                hoverPredictionWorldPoints.Length,
+                sphereOfInfluenceEntryPreview.entryTime
+            );
+            return;
+        }
+
+        UpdateHoverPrediction(
+            hasManeuverNode ? global::Vector2.Zero() : plannedDeltaV
         );
     }
 
@@ -276,13 +305,9 @@ public class OrbitPreviewView : MonoBehaviour
             return Array.Empty<Vector3>();
         }
 
-        Simulation preview = simulation.CreateCopy();
-        preview.ship.thrust = global::Vector2.Zero();
-        preview.ApplyShipDeltaV(plannedDeltaV);
-
         double orbitPeriod =
             plannedDeltaV.LengthSquared() > 0 ?
-            simulation.GetPreviewShipOrbitalPeriodRelativeToActivePrimary(plannedDeltaV) :
+            runner.GetPlannedOrbitPeriod() :
             simulation.GetShipOrbitalPeriodRelativeToActivePrimary();
         bool isClosedOrbit =
             !double.IsInfinity(orbitPeriod) &&
@@ -292,21 +317,20 @@ public class OrbitPreviewView : MonoBehaviour
         {
             global::Vector2[] orbitPoints =
                 plannedDeltaV.LengthSquared() > 0 ?
-                simulation.GetPreviewShipOrbitPathRelativeToActivePrimary(
-                    plannedDeltaV,
-                    previewPointCount
-                ) :
+                runner.GetPlannedOrbitPath(previewPointCount) :
                 simulation.GetShipOrbitPathRelativeToActivePrimary(
                     previewPointCount
                 );
             return BuildHoverPredictionFromOrbitPoints(
                 orbitPoints,
                 orbitPeriod,
-                preview.ship.position,
+                simulation.ship.position,
                 out predictionTimes
             );
         }
 
+        Simulation preview = simulation.CreateCopy();
+        preview.ship.thrust = global::Vector2.Zero();
         int sampleCount = hoverPredictionStepCount;
         double sampleDt = hoverPredictionDt;
         Vector3[] predictionWorldPoints = new Vector3[sampleCount + 1];
@@ -320,6 +344,35 @@ public class OrbitPreviewView : MonoBehaviour
         }
 
         return predictionWorldPoints;
+    }
+
+    Vector3[] ToWorldPositions(global::Vector2[] simulationPoints)
+    {
+        Vector3[] worldPoints = new Vector3[simulationPoints.Length];
+
+        for (int i = 0; i < simulationPoints.Length; i++)
+        {
+            worldPoints[i] = ToWorldPosition(simulationPoints[i]);
+        }
+
+        return worldPoints;
+    }
+
+    double[] BuildLinearPredictionTimes(int pointCount, double endTime)
+    {
+        double[] predictionTimes = new double[pointCount];
+
+        if (pointCount <= 1)
+        {
+            return predictionTimes;
+        }
+
+        for (int i = 0; i < pointCount; i++)
+        {
+            predictionTimes[i] = endTime * i / (pointCount - 1);
+        }
+
+        return predictionTimes;
     }
 
     Vector3[] BuildHoverPredictionFromOrbitPoints(
@@ -506,6 +559,7 @@ public class OrbitPreviewView : MonoBehaviour
         {
             showWarpContextMenu = true;
             warpMenuTime = hoveredOrbitPointTime;
+            warpMenuWorldPosition = hoveredOrbitPointPosition;
             warpMenuGuiPosition = hoverGuiPosition;
         }
 
@@ -775,7 +829,7 @@ public class OrbitPreviewView : MonoBehaviour
         {
             runner.SetManeuverNode(
                 warpMenuTime,
-                ToSimulationPosition(hoveredOrbitPointPosition)
+                ToSimulationPosition(warpMenuWorldPosition)
             );
             showWarpContextMenu = false;
             HideOrbitHoverPoint();
@@ -1194,11 +1248,20 @@ public class OrbitPreviewView : MonoBehaviour
             }
         }
 
+        double periapsisDistance = Math.Sqrt(periapsisDistanceSquared);
+        double apoapsisDistance = Math.Sqrt(apoapsisDistanceSquared);
+
+        if (IsNearlyCircular(periapsisDistance, apoapsisDistance))
+        {
+            HideMarkers(periapsisText, apoapsisText);
+            return;
+        }
+
         ShowMarker(
             periapsisText,
             orbitPoints[periapsisIndex],
             "Pe",
-            Math.Sqrt(periapsisDistanceSquared) - primaryRadius
+            periapsisDistance - primaryRadius
         );
 
         if (showApoapsis)
@@ -1207,7 +1270,7 @@ public class OrbitPreviewView : MonoBehaviour
                 apoapsisText,
                 orbitPoints[apoapsisIndex],
                 "Ap",
-                Math.Sqrt(apoapsisDistanceSquared) - primaryRadius
+                apoapsisDistance - primaryRadius
             );
         }
         else
@@ -1256,11 +1319,20 @@ public class OrbitPreviewView : MonoBehaviour
             }
         }
 
+        double periapsisDistance = Math.Sqrt(periapsisDistanceSquared) / worldScale;
+        double apoapsisDistance = Math.Sqrt(apoapsisDistanceSquared) / worldScale;
+
+        if (IsNearlyCircular(periapsisDistance, apoapsisDistance))
+        {
+            HideMarkers(periapsisText, apoapsisText);
+            return;
+        }
+
         ShowMarker(
             periapsisText,
             orbitPoints[periapsisIndex],
             "Pe",
-            Math.Sqrt(periapsisDistanceSquared) / worldScale - primaryRadius
+            periapsisDistance - primaryRadius
         );
 
         if (showApoapsis)
@@ -1269,13 +1341,22 @@ public class OrbitPreviewView : MonoBehaviour
                 apoapsisText,
                 orbitPoints[apoapsisIndex],
                 "Ap",
-                Math.Sqrt(apoapsisDistanceSquared) / worldScale - primaryRadius
+                apoapsisDistance - primaryRadius
             );
         }
         else
         {
             apoapsisText.gameObject.SetActive(false);
         }
+    }
+
+    bool IsNearlyCircular(double periapsisDistance, double apoapsisDistance)
+    {
+        double averageDistance = (periapsisDistance + apoapsisDistance) * 0.5;
+        double minimumVisibleSpread =
+            Math.Max(0.01, averageDistance * nearCircularMarkerEccentricity);
+        return Math.Abs(apoapsisDistance - periapsisDistance) <=
+            minimumVisibleSpread;
     }
 
     void ShowMarker(

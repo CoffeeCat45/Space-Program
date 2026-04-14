@@ -461,12 +461,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 641d0189ef4582643978d4f0ff7a0089, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimulationRunner
-  scenario: 1
+  scenario: 2
   fixedDt: 0.02
   timeScale: 1
   worldScale: 0.02
   shipTurnSpeedDegrees: 120
-  shipThrustAcceleration: 8
+  shipAutoTurnSpeedDegrees: 240
+  shipThrustForce: 60
   plannedDeltaVStep: 0.25
   fineManeuverStepMultiplier: 0.2
   coarseManeuverStepMultiplier: 5
@@ -474,6 +475,7 @@ MonoBehaviour:
   previewAnalysisDt: 0.2
   previewAnalysisUpdateInterval: 0.5
   warpToPointTimeScale: 50
+  maneuverWarpLeadTime: 60
   targetBodyName: Moon
 --- !u!4 &1012111197
 Transform:
