@@ -1,0 +1,21 @@
+﻿{
+    "id": "restock-engine-terrier-1",
+    "displayName": "LV-909 Terrier",
+    "category": "Engine",
+    "dryMass": 0.5,
+    "fuelCapacity": 0,
+    "maxThrustVac": 60,
+    "ispVacuum": 345,
+  "nodes":[
+    {
+            "localPosition": [0, 0.111000001430511, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.806699991226196, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

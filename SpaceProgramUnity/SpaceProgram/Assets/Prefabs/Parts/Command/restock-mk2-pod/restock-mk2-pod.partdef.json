@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-mk2-pod",
+    "displayName": "Mk2 Command Pod",
+    "category": "Command",
+    "dryMass": 0.8,
+    "fuelCapacity": 0,
+  "nodes":[
+    {
+            "localPosition": [0, 0.75, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.75, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

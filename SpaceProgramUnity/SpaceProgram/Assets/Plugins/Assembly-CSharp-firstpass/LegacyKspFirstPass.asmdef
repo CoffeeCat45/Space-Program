@@ -1,0 +1,16 @@
+{
+    "name": "LegacyKspFirstPass",
+    "rootNamespace": "",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "LEGACY_KSP_PLUGINS_ENABLED"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

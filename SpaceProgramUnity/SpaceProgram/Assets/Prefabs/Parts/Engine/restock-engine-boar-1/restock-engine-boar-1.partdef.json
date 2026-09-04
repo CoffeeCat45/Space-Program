@@ -1,0 +1,21 @@
+﻿{
+    "id": "restock-engine-boar-1",
+    "displayName": "KR-1 Boar",
+    "category": "Engine",
+    "dryMass": 2.5,
+    "fuelCapacity": 0,
+    "maxThrustVac": 1000,
+    "ispVacuum": 300,
+  "nodes":[
+    {
+            "localPosition": [0, 0.599356055259705, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.624714970588684, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

@@ -1,26 +1,23 @@
 static class Integrator
 {
-    // StepPosition = сделать шаг позиции.
-    public static void StepPosition(Body body, Vector2 acceleration, double dt)
+    public static void StepPosition(Body body, SimVector3 acceleration, double dt)
     {
         if (body.isStatic)
         {
             return;
         }
 
-        // Velocity Verlet: сначала двигаем позицию по текущей скорости и ускорению.
-        Vector2 velocityPart = body.velocity.Multiply(dt);
-        Vector2 accelerationPart = acceleration.Multiply(0.5 * dt * dt);
-        Vector2 movement = velocityPart.Add(accelerationPart);
+        SimVector3 velocityPart = body.velocity.Multiply(dt);
+        SimVector3 accelerationPart = acceleration.Multiply(0.5 * dt * dt);
+        SimVector3 movement = velocityPart.Add(accelerationPart);
 
         body.position = body.position.Add(movement);
     }
 
-    // StepVelocity = сделать шаг скорости.
     public static void StepVelocity(
         Body body,
-        Vector2 oldAcceleration,
-        Vector2 newAcceleration,
+        SimVector3 oldAcceleration,
+        SimVector3 newAcceleration,
         double dt
     )
     {
@@ -29,8 +26,7 @@ static class Integrator
             return;
         }
 
-        // Скорость меняем по среднему ускорению за шаг.
-        Vector2 averageAcceleration = oldAcceleration.Add(newAcceleration).Multiply(0.5);
+        SimVector3 averageAcceleration = oldAcceleration.Add(newAcceleration).Multiply(0.5);
         body.velocity = body.velocity.Add(averageAcceleration.Multiply(dt));
     }
 }

@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-375-1",
+    "displayName": "Kerbodyne S3-14400",
+    "category": "FuelTank",
+    "dryMass": 5,
+    "fuelCapacity": 14400,
+  "nodes":[
+    {
+            "localPosition": [0, 3.75, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -3.75, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

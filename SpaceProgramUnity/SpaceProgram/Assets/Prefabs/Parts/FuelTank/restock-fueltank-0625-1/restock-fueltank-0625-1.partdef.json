@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-0625-1",
+    "displayName": "Oscar-B Fuel Tank (Tall)",
+    "category": "FuelTank",
+    "dryMass": 0.092,
+    "fuelCapacity": 295,
+  "nodes":[
+    {
+            "localPosition": [0, 0.704999983310699, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.704999983310699, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+[{"name":"S1 Booster","dryMass":10,"fuelMass":24,"maxFuelMass":24,"thrust":4639.444444444444,"isp":1024.5,"dragCoefficient":0.25},{"name":"S2 Orbiter","dryMass":5,"fuelMass":8,"maxFuelMass":8,"thrust":628.2,"isp":310,"dragCoefficient":0.22}]

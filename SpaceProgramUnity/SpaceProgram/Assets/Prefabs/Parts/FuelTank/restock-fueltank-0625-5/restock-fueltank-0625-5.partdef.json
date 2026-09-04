@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-0625-5",
+    "displayName": "Fueltank 0625 5",
+    "category": "FuelTank",
+    "dryMass": 0.014,
+    "fuelCapacity": 43,
+  "nodes":[
+    {
+            "localPosition": [0, 0.102879002690315, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.103362008929253, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

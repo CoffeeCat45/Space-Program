@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-375-3",
+    "displayName": "Kerbodyne S3-3600",
+    "category": "FuelTank",
+    "dryMass": 1.5,
+    "fuelCapacity": 3600,
+  "nodes":[
+    {
+            "localPosition": [0, 0.960215985774994, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.965323984622955, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

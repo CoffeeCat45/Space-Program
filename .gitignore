@@ -7,6 +7,9 @@ Desktop.ini
 .vs/
 .idea/
 .dotnet/
+.dotnet-cli/
+.obsidian/
+**/.plastic/
 
 # VS Code
 .vscode/*
@@ -37,6 +40,11 @@ TestResults/
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 [Rr]ecordings/
+[Pp]rofilerCaptures/
+**/Assets/_Recovery/
+
+# Burst/debug next to a player (folder name from Unity)
+**/*_BurstDebugInformation_DoNotShip/
 
 # Unity package cache
 Packages/packages-lock.json
@@ -57,4 +65,52 @@ Packages/packages-lock.json
 
 # Crash reports
 sysinfo.txt
+
+# Archived unused KSP/RSS dumps (not loaded by the game)
+/Не используемые/
+
+# Local NASA/LROC source dumps. Runtime uses StreamingAssets png + moon_elevation.raw
+/файлы луны/
+
+# Frozen console tester — not used; Unity Play only
+/SimulationConsole/
+
+# Published lockstep server binaries
+SimulationServer/publish/
+
+# --- Keep on this machine, not GitHub (datasets / maps / imported art) ---
+# Heights, pyramids, SPEL
+**/StreamingAssets/Planet/
+**/StreamingAssets/Planet.meta
+
+# Equirect maps, clouds PNG
+**/StreamingAssets/MapMode/
+**/StreamingAssets/MapMode.meta
+
+# RSS close-up splat + world color/normal DDS
+**/Assets/Content/Environment/RSS-Terrain/
+**/Assets/Content/Environment/RSS-Textures/
+
+# Imported ReStock / skybox / mesh art
+**/Assets/Texture2D/
+**/Assets/Texture2D.meta
+**/Assets/Models/
+**/Assets/Models.meta
+**/Assets/Mesh/
+**/Assets/Mesh.meta
+**/Assets/AnimationClip/
+**/Assets/AnimationClip.meta
+**/Assets/Cubemap/
+**/Assets/Cubemap.meta
+**/Assets/Sprite/
+**/Assets/Sprite.meta
+
+# Elevation / GIS dumps if they appear outside Planet/
+*.raw
+*.tif
+*.tiff
+*.dds
+
+# Untitled local canvas
+/Без названия.canvas
 

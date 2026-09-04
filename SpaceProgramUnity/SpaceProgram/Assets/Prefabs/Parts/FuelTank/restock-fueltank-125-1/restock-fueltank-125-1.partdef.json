@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-125-1",
+    "displayName": "FL-T800 Fuel Tank",
+    "category": "FuelTank",
+    "dryMass": 2.5,
+    "fuelCapacity": 1680,
+  "nodes":[
+    {
+            "localPosition": [0, 0.9375, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.9375, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

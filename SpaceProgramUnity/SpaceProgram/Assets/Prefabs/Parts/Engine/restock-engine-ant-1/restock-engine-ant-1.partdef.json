@@ -1,0 +1,21 @@
+﻿{
+    "id": "restock-engine-ant-1",
+    "displayName": "LV-1 Ant",
+    "category": "Engine",
+    "dryMass": 0.02,
+    "fuelCapacity": 0,
+    "maxThrustVac": 2,
+    "ispVacuum": 315,
+  "nodes":[
+    {
+            "localPosition": [0, 0.0962119847536087, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.245888993144035, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

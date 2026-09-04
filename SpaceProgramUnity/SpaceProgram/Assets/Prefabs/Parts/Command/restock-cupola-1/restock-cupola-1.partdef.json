@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-cupola-1",
+    "displayName": "Mk1 Cupola",
+    "category": "Command",
+    "dryMass": 0.76,
+    "fuelCapacity": 0,
+  "nodes":[
+    {
+            "localPosition": [0, 0.839999973773956, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.300000011920929, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

@@ -1,0 +1,16 @@
+# Space Program — правила для AI
+
+Полный регламент базы знаний: `.cursor/rules/context-knowledge-base.mdc`
+
+## Коротко
+
+1. Документация: `context/` → начать с `context/INDEX.md` и `context/architecture/AI_CONTEXT.md`.
+2. Канон кода: `context/architecture/ARCHITECTURE_RULES.md` — перед правками `.cs`.
+3. Текущие задачи: **только** `context/roadmap/PROGRESS.md`.
+4. Читать **целевые** файлы (`context/systems/LOD.md`, `LOD_BASELINE_PAD_START.md` 🔒, `work_terrain.md`, …), не всю `context/`.
+5. `context/history/` и `context/deferred/` — архив, не живой план.
+6. После значимого шага: обновить `PROGRESS.md` + строка в `CHANGELOG.md`.
+7. `SimulationConsole` — не использовать. Проверка — Unity Play mode.
+
+Якорь нового чата:
+@context/architecture/AI_CONTEXT.md @context/roadmap/PROGRESS.md

@@ -1,38 +1,77 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+[DefaultExecutionOrder(200)]
 public class CameraController : MonoBehaviour
 {
     public float followSmoothness = 8.0f;
-    public float zoomSpeed = 0.4f;
-    public float minZoom = 2.0f;
-    public float maxZoom = 40.0f;
     public float doubleClickMaxDelay = 0.3f;
     public float orbitSensitivity = 0.2f;
     public float minOrbitPitch = -80.0f;
     public float maxOrbitPitch = 80.0f;
-    public float orbitDistance = 40.0f;
+    public float mapMinOrbitPitch = -89.5f;
+    public float mapMaxOrbitPitch = 89.5f;
+    public float orbitDistanceScale = 1.0f;
+    public float fieldOfView = 55.0f;
+    public float shipBoundsDistanceMultiplier = 3.5f;
+
+    public Func<Transform, Transform> ResolveFocusRoot;
+    public Func<Vector2, Transform> ResolveMapClick;
+    public event Action<Transform> FocusTargetChanged;
 
     Transform target;
     Transform defaultTarget;
-    Camera controlledCamera;
+    Camera unityCamera;
     double lastLeftClickTime = -10.0;
     double lastRightClickTime = -10.0;
     float orbitYaw;
     float orbitPitch;
+    bool useExplicitPivot;
+    Vector3 explicitPivotPosition;
+    float shipRollDegrees;
+    float autoBoundsRadius;
+    bool useChaseCamera;
+    bool snapChaseCameraNextFrame;
+    Vector3 chasePivot;
+    Vector3 chaseForward;
+    Vector3 chaseUp;
+    float chaseDistance;
+    Quaternion orbitFrameRotation = Quaternion.identity;
+    bool hasOrbitFrameRotation;
+
+    bool isMapModeActive;
+    bool snapOrbitNextLateUpdate;
+    float positionScaleForZoom = WorldVisualBridge.FlightPositionScale;
+    double currentOrbitDistanceSimMeters = 45.0;
+    double targetOrbitDistanceSimMeters = 45.0;
+    double currentOrbitDistanceUnity = 45.0;
+    double targetOrbitDistanceUnity = 45.0;
+
+    double? normalOrbitUnityMinOverride;
+    double? normalOrbitUnityMaxOverride;
+
+    const double NormalZoomFactorPerNotch = 1.24;
+    const double MapZoomFactorPerNotch = 1.52;
+    const double ScrollZoomSpeedMultiplier = 7.5;
+    const float minOrbitDistance = 0.05f;
+    const float MaxCameraDeltaTime = 0.05f;
+    const float ZoomFollowSpeed = 10.0f;
+    const float NormalNearClip = WorldVisualBridge.FlightCameraNearClip;
+    const float NormalFarClip = WorldVisualBridge.FlightCameraFarClip;
+    const float MapNearClip = WorldVisualBridge.MapCameraNearClip;
+    const float MapFarClip = WorldVisualBridge.MapCameraFarClip;
+    double mapOrbitDistanceFloorSimMeters = WorldVisualBridge.MapOrbitSimMetersMin;
 
     void Awake()
     {
-        controlledCamera = GetComponent<Camera>();
+        unityCamera = GetComponent<Camera>();
 
-        if (controlledCamera != null)
+        if (unityCamera != null)
         {
-            controlledCamera.orthographic = true;
-            controlledCamera.orthographicSize = Mathf.Clamp(
-                controlledCamera.orthographicSize,
-                minZoom,
-                maxZoom
-            );
+            unityCamera.orthographic = false;
+            unityCamera.fieldOfView = fieldOfView;
+            ApplyCameraClipPlanes();
         }
 
         transform.rotation = Quaternion.identity;
@@ -50,13 +89,470 @@ public class CameraController : MonoBehaviour
         }
     }
 
+    public void SetOrbitFrameRotation(Quaternion frameRotation)
+    {
+        orbitFrameRotation = frameRotation;
+        hasOrbitFrameRotation = true;
+    }
+
+    public void ClearOrbitFrameRotation()
+    {
+        orbitFrameRotation = Quaternion.identity;
+        hasOrbitFrameRotation = false;
+    }
+
+    public void UpdateShipFollow(
+        Vector3 pivotWorldPosition,
+        float rollDegrees,
+        double envelopeRadiusSim,
+        float positionScale
+    )
+    {
+        useChaseCamera = false;
+        useExplicitPivot = true;
+        explicitPivotPosition = pivotWorldPosition;
+        shipRollDegrees = rollDegrees;
+        positionScaleForZoom = Mathf.Max(1e-8f, positionScale);
+        autoBoundsRadius = Mathf.Max(
+            0.5f,
+            (float)(envelopeRadiusSim * shipBoundsDistanceMultiplier)
+        );
+        ApplyCameraClipPlanes();
+    }
+
+    public void UpdateChaseFollow(
+        Vector3 pivotWorldPosition,
+        Vector3 forwardWorld,
+        Vector3 upWorld,
+        float chaseDistanceUnity,
+        float positionScale,
+        bool snapImmediate
+    )
+    {
+        useChaseCamera = true;
+        useExplicitPivot = false;
+        chasePivot = pivotWorldPosition;
+        chaseForward = forwardWorld.sqrMagnitude > 1e-8f ?
+            forwardWorld.normalized :
+            Vector3.up;
+        chaseUp = upWorld.sqrMagnitude > 1e-8f ?
+            upWorld.normalized :
+            Vector3.forward;
+        chaseDistance = Mathf.Max(4.0f, chaseDistanceUnity);
+        positionScaleForZoom = Mathf.Max(1e-8f, positionScale);
+        snapChaseCameraNextFrame = snapImmediate;
+        ApplyCameraClipPlanes();
+    }
+
+    public void SnapInitialOrbitToChase(
+        Vector3 pivotWorld,
+        Vector3 offsetFromPivot,
+        Vector3 upReference,
+        Quaternion frameRotation
+    )
+    {
+        useChaseCamera = false;
+        useExplicitPivot = true;
+        explicitPivotPosition = pivotWorld;
+        shipRollDegrees = 0.0f;
+        orbitFrameRotation = frameRotation;
+        hasOrbitFrameRotation = true;
+
+        Vector3 offset = offsetFromPivot;
+
+        if (offset.sqrMagnitude <= 1e-8f)
+        {
+            offset = frameRotation * new Vector3(52.0f, 14.0f, -6.0f);
+        }
+
+        Vector3 localOffset = Quaternion.Inverse(frameRotation) * offset.normalized;
+        float horizontalDistance = Mathf.Sqrt(
+            localOffset.x * localOffset.x +
+            localOffset.z * localOffset.z
+        );
+        orbitYaw = Mathf.Atan2(localOffset.x, -localOffset.z) * Mathf.Rad2Deg;
+        orbitPitch = Mathf.Atan2(localOffset.y, horizontalDistance) * Mathf.Rad2Deg;
+        orbitPitch = Mathf.Clamp(orbitPitch, minOrbitPitch, maxOrbitPitch);
+
+        float desiredDistance = offset.magnitude;
+        float zoomDistance = Mathf.Max(0.01f, desiredDistance - autoBoundsRadius);
+
+        if (isMapModeActive)
+        {
+            double simMeters = positionScaleForZoom > 0.0f ?
+                zoomDistance / positionScaleForZoom :
+                zoomDistance;
+            currentOrbitDistanceSimMeters = ClampMapOrbitSimMeters(simMeters);
+            targetOrbitDistanceSimMeters = currentOrbitDistanceSimMeters;
+        }
+        else
+        {
+            currentOrbitDistanceUnity = ClampNormalOrbitUnity(zoomDistance);
+            targetOrbitDistanceUnity = currentOrbitDistanceUnity;
+        }
+
+        Quaternion orbitRotation = frameRotation * Quaternion.Euler(
+            orbitPitch,
+            orbitYaw,
+            0.0f
+        );
+        Vector3 orbitDirection = orbitRotation * Vector3.back;
+        transform.position = pivotWorld + orbitDirection * GetOrbitDistance();
+        Vector3 lookDirection = pivotWorld - transform.position;
+
+        if (lookDirection.sqrMagnitude > 1e-8f)
+        {
+            Vector3 up = frameRotation * Vector3.up;
+
+            if (up.sqrMagnitude <= 1e-8f)
+            {
+                up = upReference.sqrMagnitude > 1e-8f ?
+                    upReference.normalized :
+                    Vector3.up;
+            }
+
+            transform.rotation = Quaternion.LookRotation(lookDirection.normalized, up.normalized);
+        }
+    }
+
+    public void SetMapModeActive(bool active, float positionScale)
+    {
+        if (
+            isMapModeActive == active &&
+            Mathf.Approximately(positionScaleForZoom, positionScale)
+        )
+        {
+            return;
+        }
+
+        isMapModeActive = active;
+        positionScaleForZoom = Mathf.Max(1e-8f, positionScale);
+
+        if (isMapModeActive)
+        {
+            useChaseCamera = false;
+            ClearOrbitFrameRotation();
+            mapOrbitDistanceFloorSimMeters = WorldVisualBridge.MapOrbitSimMetersMin;
+            double unityDistance = currentOrbitDistanceUnity;
+            double simMeters = positionScaleForZoom > 0.0f ?
+                unityDistance / positionScaleForZoom :
+                unityDistance;
+            targetOrbitDistanceSimMeters = Math.Max(
+                simMeters,
+                WorldVisualBridge.MapOrbitSimMetersMin
+            );
+        }
+        else
+        {
+            double mapUnity = currentOrbitDistanceSimMeters * positionScaleForZoom;
+            targetOrbitDistanceUnity = ClampNormalOrbitUnity(mapUnity);
+        }
+
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(targetOrbitDistanceSimMeters);
+        targetOrbitDistanceUnity = ClampNormalOrbitUnity(targetOrbitDistanceUnity);
+        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
+        currentOrbitDistanceUnity = targetOrbitDistanceUnity;
+        ApplyCameraClipPlanes();
+    }
+
+    /// <summary>
+    /// Next LateUpdate places the camera at the flight orbit instantly (no lerp through Earth).
+    /// </summary>
+    public void SnapOrbitNextUpdate()
+    {
+        snapOrbitNextLateUpdate = true;
+        currentOrbitDistanceUnity = targetOrbitDistanceUnity;
+        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
+    }
+
+    public bool IsMapModeActive => isMapModeActive;
+
+    public void FocusOnDefaultTarget()
+    {
+        if (defaultTarget != null)
+        {
+            target = defaultTarget;
+        }
+    }
+
+    public string GetFocusTargetName()
+    {
+        if (target == null)
+        {
+            return string.Empty;
+        }
+
+        return target.name;
+    }
+
+    public bool IsFocusedOnDefaultTarget()
+    {
+        return target == defaultTarget;
+    }
+
+    public void ResetScenarioDefaults()
+    {
+        fieldOfView = 55.0f;
+        orbitDistanceScale = 1.0f;
+        useExplicitPivot = false;
+        autoBoundsRadius = 0.0f;
+        shipRollDegrees = 0.0f;
+        useChaseCamera = false;
+        snapChaseCameraNextFrame = false;
+        isMapModeActive = false;
+        ClearOrbitFrameRotation();
+        currentOrbitDistanceUnity = 45.0;
+        targetOrbitDistanceUnity = 45.0;
+        currentOrbitDistanceSimMeters = 100_000.0;
+        targetOrbitDistanceSimMeters = 100_000.0;
+        mapOrbitDistanceFloorSimMeters = WorldVisualBridge.MapOrbitSimMetersMin;
+        SetOrbitAngles(0.0f, 0.0f);
+
+        if (unityCamera != null)
+        {
+            unityCamera.fieldOfView = fieldOfView;
+            ApplyCameraClipPlanes();
+        }
+    }
+
+    public void SetOrbitAngles(float yaw, float pitch)
+    {
+        orbitYaw = yaw;
+        orbitPitch = Mathf.Clamp(pitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
+    }
+
+    /// <summary>
+    /// Map mode: orbit the planet center from the exterior side facing the launch site.
+    /// Mesh Frame yaw uses atan2(-x, -z) so Euler(pitch, yaw, 0) matches sim→mesh outward
+    /// (see work_terrain.md §3 — flight orbit uses atan2(x, -z) and mirrors longitude).
+    /// </summary>
+    public void SnapMapModeOrbitToPlanetExterior(
+        Vector3 planetCenterWorld,
+        Vector3 outwardFromPlanetToSurface
+    )
+    {
+        StabilizeMapOrbitOnTarget(
+            planetCenterWorld,
+            outwardFromPlanetToSurface,
+            WorldVisualBridge.MapOrbitSimMetersMin
+        );
+    }
+
+    /// <summary>
+    /// Map mode: lock the orbit pivot on a clicked body and look at it from outside.
+    /// Used for Sun / Moon / Planet / vessel — not only Earth.
+    /// </summary>
+    public void StabilizeMapOrbitOnTarget(
+        Vector3 pivotWorld,
+        Vector3 outwardFromTarget,
+        double minOrbitSimMeters
+    )
+    {
+        if (!isMapModeActive)
+        {
+            return;
+        }
+
+        useChaseCamera = false;
+        useExplicitPivot = true;
+        explicitPivotPosition = pivotWorld;
+        ClearOrbitFrameRotation();
+
+        if (outwardFromTarget.sqrMagnitude <= 1e-8f)
+        {
+            outwardFromTarget = transform.position - pivotWorld;
+        }
+
+        if (outwardFromTarget.sqrMagnitude <= 1e-8f)
+        {
+            outwardFromTarget = Vector3.back;
+        }
+
+        outwardFromTarget.Normalize();
+        MeshFrameOutwardToOrbitAngles(
+            outwardFromTarget,
+            out orbitYaw,
+            out orbitPitch
+        );
+        orbitPitch = Mathf.Clamp(orbitPitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
+
+        mapOrbitDistanceFloorSimMeters = Math.Max(1_000.0, minOrbitSimMeters);
+        if (targetOrbitDistanceSimMeters < mapOrbitDistanceFloorSimMeters)
+        {
+            targetOrbitDistanceSimMeters = mapOrbitDistanceFloorSimMeters * 1.15;
+        }
+
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(targetOrbitDistanceSimMeters);
+        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
+        snapOrbitNextLateUpdate = true;
+
+        float orbitDistance = GetOrbitDistance();
+        Vector3 desiredPosition = pivotWorld + outwardFromTarget * orbitDistance;
+        transform.position = desiredPosition;
+
+        Vector3 lookDirection = pivotWorld - desiredPosition;
+
+        if (lookDirection.sqrMagnitude > 1e-8f)
+        {
+            transform.rotation = Quaternion.LookRotation(
+                lookDirection.normalized,
+                Vector3.up
+            );
+        }
+    }
+
+    public void SetMapOrbitPivotWorld(Vector3 pivotWorld)
+    {
+        if (!isMapModeActive)
+        {
+            return;
+        }
+
+        useExplicitPivot = true;
+        explicitPivotPosition = pivotWorld;
+    }
+
+    static void MeshFrameOutwardToOrbitAngles(
+        Vector3 outwardUnit,
+        out float yawDegrees,
+        out float pitchDegrees
+    )
+    {
+        float horizontalDistance = Mathf.Sqrt(
+            (outwardUnit.x * outwardUnit.x) +
+            (outwardUnit.z * outwardUnit.z)
+        );
+        yawDegrees = Mathf.Atan2(-outwardUnit.x, -outwardUnit.z) * Mathf.Rad2Deg;
+        pitchDegrees = Mathf.Atan2(outwardUnit.y, horizontalDistance) * Mathf.Rad2Deg;
+    }
+
+    float GetActiveMinOrbitPitch()
+    {
+        return isMapModeActive ? mapMinOrbitPitch : minOrbitPitch;
+    }
+
+    float GetActiveMaxOrbitPitch()
+    {
+        return isMapModeActive ? mapMaxOrbitPitch : maxOrbitPitch;
+    }
+
+    public void SetNormalOrbitDistanceUnity(double distanceUnity)
+    {
+        targetOrbitDistanceUnity = ClampNormalOrbitUnity(distanceUnity);
+        currentOrbitDistanceUnity = targetOrbitDistanceUnity;
+    }
+
+    public void SetNormalOrbitUnityLimits(double minUnity, double maxUnity)
+    {
+        normalOrbitUnityMinOverride = minUnity;
+        normalOrbitUnityMaxOverride = maxUnity;
+        targetOrbitDistanceUnity = ClampNormalOrbitUnity(targetOrbitDistanceUnity);
+        currentOrbitDistanceUnity = ClampNormalOrbitUnity(currentOrbitDistanceUnity);
+    }
+
+    public double GetNormalOrbitUnityMax()
+    {
+        return normalOrbitUnityMaxOverride ?? WorldVisualBridge.NormalCameraOrbitUnityMax;
+    }
+
+    public void SetMapOrbitDistanceSimMeters(double distanceSimMeters)
+    {
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(distanceSimMeters);
+        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
+    }
+
+    /// <summary>
+    /// After focusing the planet globe, enforce exterior orbit distance (sim meters).
+    /// </summary>
+    public void EnsureMapOrbitExteriorDistance()
+    {
+        if (!isMapModeActive)
+        {
+            return;
+        }
+
+        double safeDistance = WorldVisualBridge.MapOrbitSimMetersMin;
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(
+            Math.Max(targetOrbitDistanceSimMeters, safeDistance)
+        );
+        currentOrbitDistanceSimMeters = ClampMapOrbitSimMeters(
+            Math.Max(currentOrbitDistanceSimMeters, safeDistance)
+        );
+        ApplyCameraClipPlanes();
+    }
+
+    void Update()
+    {
+        if (Mouse.current == null)
+        {
+            return;
+        }
+
+        float scroll = Mouse.current.scroll.ReadValue().y;
+
+        if (Mathf.Abs(scroll) < 0.0001f)
+        {
+            return;
+        }
+
+        float scrollNotches = scroll / 120f * (float)ScrollZoomSpeedMultiplier;
+
+        if (isMapModeActive)
+        {
+            targetOrbitDistanceSimMeters *= Math.Pow(
+                MapZoomFactorPerNotch,
+                -scrollNotches
+            );
+            targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(
+                targetOrbitDistanceSimMeters
+            );
+        }
+        else
+        {
+            targetOrbitDistanceUnity *= Math.Pow(
+                NormalZoomFactorPerNotch,
+                -scrollNotches
+            );
+            targetOrbitDistanceUnity = ClampNormalOrbitUnity(targetOrbitDistanceUnity);
+        }
+    }
+
     void LateUpdate()
     {
         UpdateDoubleClickFocus();
         UpdateDoubleRightClickReset();
         UpdateOrbitRotation();
-        UpdateZoom();
+
+        if (isMapModeActive)
+        {
+            targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(
+                targetOrbitDistanceSimMeters
+            );
+            currentOrbitDistanceSimMeters = ClampMapOrbitSimMeters(
+                currentOrbitDistanceSimMeters
+            );
+        }
+
+        float followT = ExpFollow(ZoomFollowSpeed, GetCameraDeltaTime());
+        currentOrbitDistanceSimMeters += (
+            targetOrbitDistanceSimMeters - currentOrbitDistanceSimMeters
+        ) * followT;
+        currentOrbitDistanceUnity += (
+            targetOrbitDistanceUnity - currentOrbitDistanceUnity
+        ) * followT;
+
         FollowTarget();
+        ApplyCameraClipPlanes();
+    }
+
+    static float GetCameraDeltaTime()
+    {
+        return Mathf.Min(Time.unscaledDeltaTime, MaxCameraDeltaTime);
+    }
+
+    static float ExpFollow(float speed, float deltaTime)
+    {
+        return 1.0f - Mathf.Exp(-speed * Mathf.Max(deltaTime, 0.0f));
     }
 
     void UpdateOrbitRotation()
@@ -70,16 +566,16 @@ public class CameraController : MonoBehaviour
             return;
         }
 
-        UnityEngine.Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+        Vector2 mouseDelta = Mouse.current.delta.ReadValue();
         orbitYaw += mouseDelta.x * orbitSensitivity;
         orbitPitch -= mouseDelta.y * orbitSensitivity;
-        orbitPitch = Mathf.Clamp(orbitPitch, minOrbitPitch, maxOrbitPitch);
+        orbitPitch = Mathf.Clamp(orbitPitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
     }
 
     void UpdateDoubleClickFocus()
     {
         if (
-            controlledCamera == null ||
+            unityCamera == null ||
             Mouse.current == null ||
             Mouse.current.leftButton == null ||
             !Mouse.current.leftButton.wasPressedThisFrame
@@ -98,14 +594,17 @@ public class CameraController : MonoBehaviour
         }
 
         Transform clickedTarget = GetClickedFocusTarget();
-
-        if (clickedTarget != null)
+        if (clickedTarget == null)
         {
-            target = clickedTarget;
+            return;
         }
-        else if (defaultTarget != null)
+
+        Transform newTarget = clickedTarget;
+
+        if (newTarget != null)
         {
-            target = defaultTarget;
+            target = newTarget;
+            FocusTargetChanged?.Invoke(target);
         }
     }
 
@@ -135,20 +634,96 @@ public class CameraController : MonoBehaviour
 
     Transform GetClickedFocusTarget()
     {
-        Ray ray = controlledCamera.ScreenPointToRay(
-            Mouse.current.position.ReadValue()
-        );
+        Vector2 mousePosition = Mouse.current.position.ReadValue();
 
-        if (!Physics.Raycast(ray, out RaycastHit hit))
+        if (isMapModeActive && ResolveMapClick != null)
+        {
+            Transform screenPick = ResolveMapClick(mousePosition);
+
+            if (screenPick != null)
+            {
+                return screenPick;
+            }
+        }
+
+        Ray ray = unityCamera.ScreenPointToRay(mousePosition);
+
+        RaycastHit[] hits = Physics.RaycastAll(ray);
+
+        if (hits == null || hits.Length == 0)
         {
             return null;
         }
 
-        return GetFocusRoot(hit.collider.transform);
+        System.Array.Sort(
+            hits,
+            (RaycastHit left, RaycastHit right) => left.distance.CompareTo(right.distance)
+        );
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            if (!IsPriorityMapPickHit(hits[i].collider))
+            {
+                continue;
+            }
+
+            Transform resolved = GetFocusRoot(hits[i].collider.transform);
+
+            if (resolved != null)
+            {
+                return resolved;
+            }
+        }
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Transform resolved = GetFocusRoot(hits[i].collider.transform);
+
+            if (resolved != null)
+            {
+                return resolved;
+            }
+        }
+
+        return null;
+    }
+
+    static bool IsPriorityMapPickHit(Collider collider)
+    {
+        if (collider == null)
+        {
+            return false;
+        }
+
+        Transform current = collider.transform;
+
+        while (current != null)
+        {
+            if (
+                current.name == BodyView.MapModePickColliderName ||
+                current.name == "MapModeMarker"
+            )
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 
     Transform GetFocusRoot(Transform hitTransform)
     {
+        if (ResolveFocusRoot != null)
+        {
+            Transform resolved = ResolveFocusRoot(hitTransform);
+            if (resolved != null)
+            {
+                return resolved;
+            }
+        }
+
         Transform currentTransform = hitTransform;
 
         while (currentTransform.parent != null)
@@ -159,56 +734,244 @@ public class CameraController : MonoBehaviour
         return currentTransform;
     }
 
-    void UpdateZoom()
+    float GetOrbitDistance()
     {
-        if (controlledCamera == null || Mouse.current == null)
+        float unityDistance;
+
+        if (isMapModeActive)
         {
-            return;
+            unityDistance = (float)(currentOrbitDistanceSimMeters * positionScaleForZoom);
+        }
+        else
+        {
+            unityDistance = (float)currentOrbitDistanceUnity;
+            float boundsBlend = Mathf.InverseLerp(
+                WorldVisualBridge.NormalCameraOrbitUnityMin,
+                WorldVisualBridge.NormalCameraOrbitUnityMax,
+                unityDistance
+            );
+            unityDistance += autoBoundsRadius * boundsBlend;
         }
 
-        float scroll = Mouse.current.scroll.ReadValue().y;
+        return Mathf.Max(minOrbitDistance, unityDistance) * orbitDistanceScale;
+    }
 
-        if (scroll == 0)
-        {
-            return;
-        }
+    public float GetCurrentOrbitDistanceUnity()
+    {
+        return GetOrbitDistance();
+    }
 
-        controlledCamera.orthographicSize = Mathf.Clamp(
-            controlledCamera.orthographicSize - scroll * zoomSpeed,
-            minZoom,
-            maxZoom
+    double ClampNormalOrbitUnity(double distanceUnity)
+    {
+        return Math.Clamp(
+            distanceUnity,
+            normalOrbitUnityMinOverride ?? WorldVisualBridge.NormalCameraOrbitUnityMin,
+            normalOrbitUnityMaxOverride ?? WorldVisualBridge.NormalCameraOrbitUnityMax
         );
+    }
+
+    double ClampMapOrbitSimMeters(double distanceSimMeters)
+    {
+        return Math.Max(distanceSimMeters, mapOrbitDistanceFloorSimMeters);
+    }
+
+    void ApplyCameraClipPlanes()
+    {
+        if (unityCamera == null)
+        {
+            return;
+        }
+
+        if (isMapModeActive)
+        {
+            float orbitDistance = GetOrbitDistance();
+            unityCamera.nearClipPlane = Mathf.Clamp(orbitDistance * 0.0015f, MapNearClip, 400f);
+            unityCamera.farClipPlane = Mathf.Max(MapFarClip, orbitDistance * 25f);
+        }
+        else
+        {
+            unityCamera.nearClipPlane = NormalNearClip;
+            unityCamera.farClipPlane = NormalFarClip;
+        }
     }
 
     void FollowTarget()
     {
-        if (target == null)
+        if (useChaseCamera)
+        {
+            FollowChaseTarget();
+            return;
+        }
+
+        Vector3 targetPosition;
+
+        if (useExplicitPivot)
+        {
+            targetPosition = explicitPivotPosition;
+        }
+        else if (target != null)
+        {
+            targetPosition = target.position;
+        }
+        else
         {
             return;
         }
 
-        Vector3 targetPosition = new Vector3(
-            target.position.x,
-            target.position.y,
-            target.position.z
-        );
-        Quaternion orbitRotation = Quaternion.Euler(
-            orbitPitch,
-            orbitYaw,
-            0.0f
-        );
-        Vector3 cameraPosition =
-            targetPosition + orbitRotation * new Vector3(0, 0, -orbitDistance);
+        Quaternion orbitRotation = ResolveOrbitRotation();
+        Vector3 desiredPosition =
+            targetPosition +
+            orbitRotation * new Vector3(0, 0, -GetOrbitDistance());
 
+        bool orbitDragging =
+            Mouse.current != null &&
+            Mouse.current.rightButton != null &&
+            Mouse.current.rightButton.isPressed;
+        bool snapOrbit = isMapModeActive || orbitDragging || snapOrbitNextLateUpdate;
+        float followT = ExpFollow(followSmoothness, GetCameraDeltaTime());
+
+        if (snapOrbit)
+        {
+            transform.position = desiredPosition;
+        }
+        else
+        {
+            transform.position = Vector3.Lerp(
+                transform.position,
+                desiredPosition,
+                followT
+            );
+
+            if ((transform.position - desiredPosition).sqrMagnitude <= 1e-6f)
+            {
+                transform.position = desiredPosition;
+            }
+        }
+
+        Vector3 lookDirection = targetPosition - desiredPosition;
+
+        if (lookDirection.sqrMagnitude > 0.0001f)
+        {
+            Vector3 upReference = ResolveOrbitUpReference();
+            Quaternion lookRotation = Quaternion.LookRotation(
+                lookDirection.normalized,
+                upReference
+            );
+            Quaternion rollRotation = isMapModeActive ?
+                Quaternion.identity :
+                Quaternion.Euler(
+                    0.0f,
+                    0.0f,
+                    shipRollDegrees
+                );
+            Quaternion desiredRotation = lookRotation * rollRotation;
+
+            if (snapOrbit)
+            {
+                transform.rotation = desiredRotation;
+            }
+            else
+            {
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    desiredRotation,
+                    followT
+                );
+
+                if (Quaternion.Angle(transform.rotation, desiredRotation) <= 0.01f)
+                {
+                    transform.rotation = desiredRotation;
+                }
+            }
+        }
+
+        if (unityCamera != null)
+        {
+            unityCamera.fieldOfView = fieldOfView;
+        }
+
+        snapOrbitNextLateUpdate = false;
+    }
+
+    void FollowChaseTarget()
+    {
+        Vector3 cameraPosition = chasePivot - chaseForward * chaseDistance;
+        Quaternion targetRotation = Quaternion.LookRotation(chaseForward, chaseUp);
+
+        if (snapChaseCameraNextFrame)
+        {
+            transform.position = cameraPosition;
+            transform.rotation = targetRotation;
+            snapChaseCameraNextFrame = false;
+            return;
+        }
+
+        float followT = ExpFollow(followSmoothness, GetCameraDeltaTime());
         transform.position = Vector3.Lerp(
             transform.position,
             cameraPosition,
-            followSmoothness * Time.deltaTime
+            followT
         );
+
+        if ((transform.position - cameraPosition).sqrMagnitude <= 1e-6f)
+        {
+            transform.position = cameraPosition;
+        }
+
         transform.rotation = Quaternion.Slerp(
             transform.rotation,
-            orbitRotation,
-            followSmoothness * Time.deltaTime
+            targetRotation,
+            followT
         );
+
+        if (Quaternion.Angle(transform.rotation, targetRotation) <= 0.01f)
+        {
+            transform.rotation = targetRotation;
+        }
+
+        if (unityCamera != null)
+        {
+            unityCamera.fieldOfView = fieldOfView;
+        }
+    }
+
+    Quaternion ResolveOrbitFrameRotation()
+    {
+        if (isMapModeActive)
+        {
+            return Quaternion.identity;
+        }
+
+        if (hasOrbitFrameRotation)
+        {
+            return orbitFrameRotation;
+        }
+
+        if (target != null)
+        {
+            return target.rotation;
+        }
+
+        return Quaternion.identity;
+    }
+
+    Quaternion ResolveOrbitRotation()
+    {
+        Quaternion localOrbit = Quaternion.Euler(orbitPitch, orbitYaw, 0.0f);
+        Quaternion frameRotation = ResolveOrbitFrameRotation();
+
+        if (frameRotation == Quaternion.identity)
+        {
+            return localOrbit;
+        }
+
+        return frameRotation * localOrbit;
+    }
+
+    Vector3 ResolveOrbitUpReference()
+    {
+        Quaternion frameRotation = ResolveOrbitFrameRotation();
+        Vector3 up = frameRotation * Vector3.up;
+        return up.sqrMagnitude > 1e-8f ? up.normalized : Vector3.up;
     }
 }

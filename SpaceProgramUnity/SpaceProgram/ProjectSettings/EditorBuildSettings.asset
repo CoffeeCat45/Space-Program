@@ -6,7 +6,16 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/SampleScene.unity
+    path: Assets/Models/Parts/Scenes/VabScene/VabScene.unity
+    guid: ceaebc67153c63d448434df4aaa02809
+  - enabled: 1
+    path: Assets/Scenery/KSC/Interiors3D/VABlvl3.unity
+    guid: d3528dcf087cf424ea28d3c266d453b9
+  - enabled: 1
+    path: Assets/Scenes/Earth_Sandbox_Test.unity
+    guid: bab2d336c729b424ba6259cb67546a19
+  - enabled: 1
+    path: Assets/Models/Parts/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

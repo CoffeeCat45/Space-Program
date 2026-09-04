@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-375-2",
+    "displayName": "Kerbodyne S3-7200",
+    "category": "FuelTank",
+    "dryMass": 3,
+    "fuelCapacity": 7200,
+  "nodes":[
+    {
+            "localPosition": [0, 1.92980194091797, -4.76837158203125E-07],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -1.93087482452393, -4.76837158203125E-07],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

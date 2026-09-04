@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-125-4",
+    "displayName": "FL-T100 Fuel Tank",
+    "category": "FuelTank",
+    "dryMass": 0.125,
+    "fuelCapacity": 100,
+  "nodes":[
+    {
+            "localPosition": [0, 0.34375, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.34375, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

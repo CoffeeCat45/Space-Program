@@ -1,0 +1,23 @@
+fileFormatVersion: 2
+guid: 24be63e770c435949971aed79610cf03
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - earthColorMap: {fileID: 2800000, guid: a67b0bb37a0799f489af984e8b13bec2, type: 3}
+  - earthNormalMap: {fileID: 2800000, guid: aef8b16e41d575946800c85838d5b65d, type: 3}
+  - earthHeightMap: {instanceID: 0}
+  - splatInfluenceMap: {instanceID: 0}
+  - lowAlbedoMap: {instanceID: 0}
+  - lowNormalMap: {instanceID: 0}
+  - midAlbedoMap: {instanceID: 0}
+  - midNormalMap: {instanceID: 0}
+  - highAlbedoMap: {instanceID: 0}
+  - highNormalMap: {instanceID: 0}
+  - steepAlbedoMap: {instanceID: 0}
+  - steepNormalMap: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

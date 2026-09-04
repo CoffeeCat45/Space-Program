@@ -1,0 +1,94 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: ksc_exterior_terrain_grass_VABLvl02_highQualityGrass
+  m_Shader: {fileID: 4800000, guid: ae8058508f9c08a4f99651ab5cc19b3c, type: 3}
+  m_ShaderKeywords:
+  m_LightmapFlags: 5
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _BlendMaskTexture:
+        m_Texture: {fileID: 2800000, guid: 1140f9cafe4d1e84a9d48b071a0cadff, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _FarGrassNormal:
+        m_Texture: {fileID: 2800000, guid: fe47245115951244dbd7ebba8c44445a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _FarGrassTexture:
+        m_Texture: {fileID: 2800000, guid: aaed0e00a576baf4bab59bd31633f3cf, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MidGrassNormal:
+        m_Texture: {fileID: 2800000, guid: fe47245115951244dbd7ebba8c44445a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MidGrassTexture:
+        m_Texture: {fileID: 2800000, guid: aaed0e00a576baf4bab59bd31633f3cf, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _NearGrassNormal:
+        m_Texture: {fileID: 2800000, guid: fe47245115951244dbd7ebba8c44445a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _NearGrassTexture:
+        m_Texture: {fileID: 2800000, guid: aaed0e00a576baf4bab59bd31633f3cf, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _TarmacNormal:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _TarmacTexture:
+        m_Texture: {fileID: 2800000, guid: a4b31c51d920e0842ba6b790ad6b23f0, type: 3}
+        m_Scale: {x: 11, y: 11}
+        m_Offset: {x: 0, y: 0}
+    m_Floats:
+      _Cutoff: 0.5
+      _FarGrassBlendDistance: 100
+      _FarGrassTiling: 0.01
+      _MaxHeight: 125
+      _MidGrassBlendDistance: 15
+      _MidGrassTiling: 0.05
+      _MinHeight: 0
+      _NearGrassTiling: 1
+      _Opacity: 1
+      _RimFalloff: 0.1
+      _Tiling: 0.3
+      _UnderwaterFogFactor: 0
+      _deepEnd: 0.3
+      _deepStart: 0
+      _fadeEnd: -1
+      _fadeStart: 0
+      _hiHiEnd: 0.9
+      _hiHiStart: 0.6
+      _hiLoEnd: 0.6
+      _hiLoStart: 0.6
+      _mainHiEnd: 0.5
+      _mainHiStart: 0.3
+      _mainLoEnd: 0.5
+      _mainLoStart: 0
+      _opacity: 1
+      _snowEnd: 1
+      _snowStart: 0.9
+      _steepBias: 1.5
+      _steepPow: 5
+    m_Colors:
+      _Color: {r: 0.64004725, g: 0.72794116, b: 0.17128026, a: 0.7294118}
+      _GrassColor: {r: 0.7204455, g: 0.77, b: 0.4917327, a: 1}
+      _RimColor: {r: 0, g: 0, b: 0, a: 0}
+      _SpecColor: {r: 1, g: 1, b: 1, a: 1}
+      _SpecularColor: {r: 0, g: 0, b: 0, a: 1}
+      _TarmacColor: {r: 0.8867924, g: 0.8867924, b: 0.8867924, a: 1}

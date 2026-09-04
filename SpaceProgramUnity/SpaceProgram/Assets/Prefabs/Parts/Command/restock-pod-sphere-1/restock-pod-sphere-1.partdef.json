@@ -1,0 +1,14 @@
+﻿{
+    "id": "restock-pod-sphere-1",
+    "displayName": "KV-1 Onion Pod",
+    "category": "Command",
+    "dryMass": 0.75,
+    "fuelCapacity": 0,
+  "nodes":[
+    {
+            "localPosition": [0, -0.870000004768372, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

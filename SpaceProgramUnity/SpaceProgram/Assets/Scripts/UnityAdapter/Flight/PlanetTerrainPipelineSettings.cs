@@ -1,0 +1,25 @@
+using UnityEngine;
+
+/// <summary>
+/// Play-mode toggles for flight terrain data sources.
+/// GEBCO-only skips RSS EarthHeight.dds (mesh heights stay GEBCO). Close-up splat
+/// still loads from RSS-Terrain when the pack is on disk.
+/// </summary>
+public static class PlanetTerrainPipelineSettings
+{
+    const string GebcoOnlyPipelineKey = "SpaceProgram.PlanetTerrain.GebcoOnlyPipeline";
+
+    /// <summary>
+    /// When true: mesh heights from GEBCO mmap only; macro color from earth_geographic.png.
+    /// RSS-Terrain close-up splat still loads when present (same as Moon).
+    /// </summary>
+    public static bool UseGebcoOnlyPipeline
+    {
+        get => PlayerPrefs.GetInt(GebcoOnlyPipelineKey, 1) == 1;
+        set
+        {
+            PlayerPrefs.SetInt(GebcoOnlyPipelineKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+    }
+}

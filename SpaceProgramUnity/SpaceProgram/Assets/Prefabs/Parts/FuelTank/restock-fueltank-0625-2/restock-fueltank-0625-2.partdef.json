@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-0625-2",
+    "displayName": "Fueltank 0625 2",
+    "category": "FuelTank",
+    "dryMass": 0.093,
+    "fuelCapacity": 298,
+  "nodes":[
+    {
+            "localPosition": [0, 0.712655007839203, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.712655007839203, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

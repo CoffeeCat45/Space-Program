@@ -1,0 +1,433 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f305f31f1f317c14f96b0bfe1cc111e0, type: 3}
+  m_Name: RuntimePartCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::RuntimePartCatalog
+  coveLaunchSite: {fileID: 1709254077376921, guid: 2368a6827fd22244093b68ee9a96e557, type: 3}
+  parts:
+  - id: restock-pod-sphere-1
+    displayName: KV-1 Onion Pod
+    category: Command
+    dryMass: 0.75
+    fuelCapacity: 0
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/Command/restock-pod-sphere-1/restock-pod-sphere-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-pod-sphere-1_icon.png
+    prefab: {fileID: 1464029590062319939, guid: 84289d8d7b2bf73479e4bf36934d2ac3, type: 3}
+    icon: {fileID: 2800000, guid: 2235afac94224354a84842e4661b2c23, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: -0.87, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0.034442008, y: -0.894769, z: 0.025526047}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-mk1-pod
+    displayName: Mk1 Command Pod
+    category: Command
+    dryMass: 0.84
+    fuelCapacity: 0
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/Command/restock-mk1-pod/restock-mk1-pod.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-mk1-pod_icon.png
+    prefab: {fileID: 1369377745809631398, guid: 8761155c92a0d9b4baac6c9b6f3ad511, type: 3}
+    icon: {fileID: 2800000, guid: a9fa4ea3cffc9a34982e9101a2ec1617, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.645, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.4, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: -0.0001630187, y: -0.43722898, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-cupola-1
+    displayName: Mk1 Cupola
+    category: Command
+    dryMass: 0.76
+    fuelCapacity: 0
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/Command/restock-cupola-1/restock-cupola-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-cupola-1_icon.png
+    prefab: {fileID: 4146435313681323084, guid: cfd2c0410a1ed5c489c768004abb4ae1, type: 3}
+    icon: {fileID: 2800000, guid: 9b7f49b19956d8e4d9fe444661f9acea, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.84, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.3, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: -0.0019304752, y: -0.38069296, z: 0.02490902}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-mk2-pod
+    displayName: Mk2 Command Pod
+    category: Command
+    dryMass: 0.8
+    fuelCapacity: 0
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/Command/restock-mk2-pod/restock-mk2-pod.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-mk2-pod_icon.png
+    prefab: {fileID: 8180685762477930853, guid: ed3db24102e55254a8f147a75a3d6c30, type: 3}
+    icon: {fileID: 2800000, guid: 153b136e1daae8743b8d875564050b2d, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.75, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.75, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.8578011, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-engine-boar-1
+    displayName: KR-1 Boar
+    category: Engine
+    dryMass: 2.5
+    fuelCapacity: 0
+    maxThrustVac: 1000
+    ispVacuum: 300
+    prefabPath: Assets/Prefabs/Parts/Engine/restock-engine-boar-1/restock-engine-boar-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-engine-boar-1_icon.png
+    prefab: {fileID: 8701130529538074047, guid: 503a26e7fc1c33c49884c2ec514f84de, type: 3}
+    icon: {fileID: 2800000, guid: 97c123c23ea24ff46af69fe154b756af, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.6, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -1.7, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -1.71, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-engine-ant-1
+    displayName: LV-1 Ant
+    category: Engine
+    dryMass: 0.02
+    fuelCapacity: 0
+    maxThrustVac: 2
+    ispVacuum: 315
+    prefabPath: Assets/Prefabs/Parts/Engine/restock-engine-ant-1/restock-engine-ant-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-engine-ant-1_icon.png
+    prefab: {fileID: 974663572455339179, guid: 358c2136bba82244e82fec60eaea8edb, type: 3}
+    icon: {fileID: 2800000, guid: 5e1a004aabafc8c40a993253957b6160, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.095, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.24, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.245, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-engine-terrier-1
+    displayName: LV-909 Terrier
+    category: Engine
+    dryMass: 0.5
+    fuelCapacity: 0
+    maxThrustVac: 60
+    ispVacuum: 345
+    prefabPath: Assets/Prefabs/Parts/Engine/restock-engine-terrier-1/restock-engine-terrier-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-engine-terrier-1_icon.png
+    prefab: {fileID: 6466626533866232971, guid: 2393c1a6289045e45a51b2c8ece3c7f0, type: 3}
+    icon: {fileID: 2800000, guid: 47cd5bb686ac93b4eb2172e5300859e0, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.1, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.8, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0.0015355349, y: -0.81, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-engine-reliant-2
+    displayName: LV-T30 Reliant
+    category: Engine
+    dryMass: 1.25
+    fuelCapacity: 0
+    maxThrustVac: 240
+    ispVacuum: 310
+    prefabPath: Assets/Prefabs/Parts/Engine/restock-engine-reliant-2/restock-engine-reliant-2.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-engine-reliant-2_icon.png
+    prefab: {fileID: 3900684688805719952, guid: 245406adfb4d6d143bf3df4d05af125d, type: 3}
+    icon: {fileID: 2800000, guid: 84f6d9c5fe3e6f7439d2e564cdd65919, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -1.63, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -1.64, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-125-4
+    displayName: FL-T100 Fuel Tank
+    category: FuelTank
+    dryMass: 0.125
+    fuelCapacity: 100
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-125-4/restock-fueltank-125-4.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-125-4_icon.png
+    prefab: {fileID: 258814608416317375, guid: 340858d2313d76c4c8f7db57f9fdab4c, type: 3}
+    icon: {fileID: 2800000, guid: 682058908ca9e3d4c95ee742f1ebd17c, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.3, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.3, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.34375, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-125-2
+    displayName: FL-T400 Fuel Tank
+    category: FuelTank
+    dryMass: 0.5
+    fuelCapacity: 400
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-125-2/restock-fueltank-125-2.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-125-2_icon.png
+    prefab: {fileID: 9060519453409690139, guid: 8d1046b64f6b59a4cad5255302edbbb8, type: 3}
+    icon: {fileID: 2800000, guid: 383572193db868a4d951687c73edcc75, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.99, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.9, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.94150007, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-125-1
+    displayName: FL-T800 Fuel Tank
+    category: FuelTank
+    dryMass: 2.5
+    fuelCapacity: 1680
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-125-1/restock-fueltank-125-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-125-1_icon.png
+    prefab: {fileID: 5157909618512921949, guid: c2852e36850834f4aa6be58fc2744597, type: 3}
+    icon: {fileID: 2800000, guid: a782d5f7f5f18f34cbf3c8429e679e5f, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 1.87, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -1.87, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -1.9125, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-0625-2
+    displayName: Fueltank 0625 2
+    category: FuelTank
+    dryMass: 0.093
+    fuelCapacity: 298
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-0625-2/restock-fueltank-0625-2.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-0625-2_icon.png
+    prefab: {fileID: 1676553176538334261, guid: f920fa1bf9e3c984abfbf5fc83b9bc8f, type: 3}
+    icon: {fileID: 2800000, guid: c58c7e2ca9491e6488131d662ad23f09, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.7, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.7, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.712655, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-0625-3
+    displayName: Fueltank 0625 3
+    category: FuelTank
+    dryMass: 0.048
+    fuelCapacity: 154
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-0625-3/restock-fueltank-0625-3.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-0625-3_icon.png
+    prefab: {fileID: 5445105760946479686, guid: 41977d7bce4ac6345a895d563a6aac8b, type: 3}
+    icon: {fileID: 2800000, guid: c8e57bc7fe0575b4697227689b8b439f, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.35, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.35, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.366111, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-0625-5
+    displayName: Fueltank 0625 5
+    category: FuelTank
+    dryMass: 0.014
+    fuelCapacity: 43
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-0625-5/restock-fueltank-0625-5.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-0625-5_icon.png
+    prefab: {fileID: 4249955537603607873, guid: 040da113ff4c7f741921610858eb90dd, type: 3}
+    icon: {fileID: 2800000, guid: ac5ac8f8cf539d141bdbcd2c1b99b338, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.09, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.09, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.10336201, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-375-1
+    displayName: Kerbodyne S3-14400
+    category: FuelTank
+    dryMass: 5
+    fuelCapacity: 14400
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-375-1/restock-fueltank-375-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-375-1_icon.png
+    prefab: {fileID: 8744851449142276929, guid: 0f2d70e843170de4ca8e82b524f32d03, type: 3}
+    icon: {fileID: 2800000, guid: 04491e85bf97a5a4bb103272d67eac11, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 3.75, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -3.75, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: -0.00000047683716, y: -3.772273, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-375-4
+    displayName: Kerbodyne S3-1800
+    category: FuelTank
+    dryMass: 0.75
+    fuelCapacity: 1800
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-375-4/restock-fueltank-375-4.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-375-4_icon.png
+    prefab: {fileID: 612638137241852394, guid: 70dda69f8a1f3c14cb8620bbe2373fbc, type: 3}
+    icon: {fileID: 2800000, guid: 6b42deff0fa3e3845906b27a27a38e39, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.48, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.48, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.502273, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-375-3
+    displayName: Kerbodyne S3-3600
+    category: FuelTank
+    dryMass: 1.5
+    fuelCapacity: 3600
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-375-3/restock-fueltank-375-3.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-375-3_icon.png
+    prefab: {fileID: 1132988026798880728, guid: 598699bd89dc1fc458a594ad30c7ef88, type: 3}
+    icon: {fileID: 2800000, guid: 59e6e5523398fae4e8d1fb47be35bfcd, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.95, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.95, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.982273, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-375-2
+    displayName: Kerbodyne S3-7200
+    category: FuelTank
+    dryMass: 3
+    fuelCapacity: 7200
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-375-2/restock-fueltank-375-2.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-375-2_icon.png
+    prefab: {fileID: 2870786364218302018, guid: 5b14468204fc7fa45ac28bbd92fbf265, type: 3}
+    icon: {fileID: 2800000, guid: d24fff0033d367542a33b288f2e3dcbd, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 1.9, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -1.94, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -1.952273, z: -0.0000009536743}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-0625-4
+    displayName: Oscar-B Fuel Tank
+    category: FuelTank
+    dryMass: 0.025
+    fuelCapacity: 80
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-0625-4/restock-fueltank-0625-4.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-0625-4_icon.png
+    prefab: {fileID: 5608957400166720632, guid: 5ff5e64dafc4e894b80ebd6104236e1b, type: 3}
+    icon: {fileID: 2800000, guid: 262b6c2c07a01bd4e981d23efce40788, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 0.175, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -0.175, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: 0, y: -0.190706, z: 0}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1
+  - id: restock-fueltank-0625-1
+    displayName: Oscar-B Fuel Tank (Tall)
+    category: FuelTank
+    dryMass: 0.092
+    fuelCapacity: 295
+    maxThrustVac: 0
+    ispVacuum: 0
+    prefabPath: Assets/Prefabs/Parts/FuelTank/restock-fueltank-0625-1/restock-fueltank-0625-1.prefab
+    iconPath: Assets/Models/Parts/Icons/@thumbs/restock-fueltank-0625-1_icon.png
+    prefab: {fileID: 5021168322286641538, guid: ab87bf752708ca545be8f83ea0e2ab2c, type: 3}
+    icon: {fileID: 2800000, guid: 5c26088299d43e347b70d694a5f6848c, type: 3}
+    nodes:
+    - localPosition: {x: 0, y: 1.39, z: 0}
+      direction: {x: 0, y: 1, z: 0}
+      role: stack_top
+    - localPosition: {x: 0, y: -1.39, z: 0}
+      direction: {x: 0, y: -1, z: 0}
+      role: stack_bottom
+    thrustOffsetPartLocal: {x: -0.00000047683716, y: -1.4089489, z: 0.00010848045}
+    thrustForceDirectionPartLocal: {x: 0, y: 1, z: 0}
+    hasThrustFrame: 1

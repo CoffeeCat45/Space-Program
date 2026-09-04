@@ -1,0 +1,57 @@
+﻿# Cursor: не индексировать кеш, сборки и сгенерированные файлы
+# Цель — не тратить контекст AI на мусор Unity / .NET
+
+# Git
+.git/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / локальные инструменты
+.vs/
+.idea/
+.vscode/
+.dotnet/
+.dotnet-cli/
+
+# .NET — сборки и артефакты
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.rsuser
+*.suo
+*.userprefs
+*.dll
+*.exe
+*.pdb
+
+# Unity — сгенерированные папки (самые тяжёлые)
+**/Library/
+**/Temp/
+**/Logs/
+**/UserSettings/
+**/MemoryCaptures/
+**/Recordings/
+**/Build/
+**/Builds/
+
+# Unity — бинарные/сценовые ассеты (не исходный код)
+*.meta
+*.unity
+*.asset
+*.prefab
+*.mat
+*.anim
+*.controller
+*.shadergraph
+*.lighting
+
+# Логи и краши
+*.log
+sysinfo.txt
+
+# Package cache / lock (редко нужны для правок кода)
+Packages/packages-lock.json

@@ -1,0 +1,13 @@
+.git/
+.vscode/
+.dotnet/
+.dotnet-cli/
+**/bin/
+**/obj/
+**/Library/
+**/Temp/
+*.meta
+*.unity
+*.asset
+*.prefab
+test1.sln	

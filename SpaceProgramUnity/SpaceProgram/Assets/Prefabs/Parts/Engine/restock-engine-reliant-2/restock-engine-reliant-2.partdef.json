@@ -1,0 +1,21 @@
+﻿{
+    "id": "restock-engine-reliant-2",
+    "displayName": "LV-T30 Reliant",
+    "category": "Engine",
+    "dryMass": 1.25,
+    "fuelCapacity": 0,
+    "maxThrustVac": 240,
+    "ispVacuum": 310,
+  "nodes":[
+    {
+            "localPosition": [0, 0.256199985742569, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -1.65600001811981, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

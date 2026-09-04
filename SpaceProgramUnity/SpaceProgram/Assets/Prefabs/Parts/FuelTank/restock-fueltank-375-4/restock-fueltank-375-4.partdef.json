@@ -1,0 +1,19 @@
+﻿{
+    "id": "restock-fueltank-375-4",
+    "displayName": "Kerbodyne S3-1800",
+    "category": "FuelTank",
+    "dryMass": 0.75,
+    "fuelCapacity": 1800,
+  "nodes":[
+    {
+            "localPosition": [0, 0.479999989271164, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.480001002550125, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

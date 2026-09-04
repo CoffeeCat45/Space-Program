@@ -1,0 +1,38 @@
+﻿{
+    "schemaVersion": 1,
+    "vesselName": "test",
+  "blocks":[
+    {
+            "blockId": "block_1",
+            "partTemplateId": "restock-mk1-pod",
+            "parentBlockId": "",
+            "localPosition": [0, 15.3999996185303, 0],
+            "localRotation": [1, 0, 0, 0],
+            "attachedToNodeIndex": -1
+        },
+    {
+            "blockId": "block_2",
+            "partTemplateId": "restock-fueltank-125-1",
+            "parentBlockId": "block_1",
+            "localPosition": [0, -2.26999950408936, 0],
+            "localRotation": [0, 0, 1, 0],
+            "attachedToNodeIndex": 1
+        },
+    {
+            "blockId": "block_3",
+            "partTemplateId": "restock-fueltank-125-1",
+            "parentBlockId": "block_2",
+            "localPosition": [0, -3.73999977111816, 0],
+            "localRotation": [1, 0, 0, 0],
+            "attachedToNodeIndex": 1
+        },
+    {
+            "blockId": "block_4",
+            "partTemplateId": "restock-engine-reliant-2",
+            "parentBlockId": "block_3",
+            "localPosition": [0, -1.86999988555908, 0],
+            "localRotation": [1, 0, 0, 0],
+            "attachedToNodeIndex": 1
+        }
+    ]
+}

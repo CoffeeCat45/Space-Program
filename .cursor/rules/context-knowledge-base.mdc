@@ -1,0 +1,57 @@
+---
+description: База знаний context/ — канон, roadmap, алгоритм работы AI
+alwaysApply: true
+---
+
+# Технический регламент: база знаний `context/`
+
+## 1. Контекст проекта
+
+- Документация живёт в `context/`. Оглавление: `context/INDEX.md`.
+- Стартовый хаб: `context/architecture/AI_CONTEXT.md` (карта ссылок, не дублировать всё в чат).
+- **Канон кода** (double, Core/Unity, timestep): `context/architecture/ARCHITECTURE_RULES.md` — проверять **перед** правками `.cs`.
+- **Текущий фокус и статусы задач** — только `context/roadmap/PROGRESS.md` (не выдумывать статусы из других файлов).
+- **Процесс с пользователем** (`делай`, чаты, якорь): `context/architecture/WORKING_WITH_USER.md`.
+- `SimulationConsole/` — заморожен; разработка и проверка только Unity Play mode.
+
+### Карта папок
+
+| Папка | Когда читать |
+|-------|----------------|
+| `context/architecture/` | Архитектура, layout, физика, конвенции Земли |
+| `context/systems/` | Terrain, LOD, VAB, ReStock, бинды, Unity entry points |
+| `context/roadmap/` | Живой план + changelog |
+| `context/history/` | Архив (что пробовали) — **не** текущий план |
+| `context/deferred/` | Отложенные инициативы — перед повторной попыткой |
+
+## 2. Алгоритм (Composer / Agent)
+
+1. **Синхронизация** — `context/architecture/AI_CONTEXT.md` → нужные 1–2 тематические файлы.
+2. **Локализация** — открывать **только** релевантные заметки, не всю `context/`:
+   - terrain / UV / GEBCO → `systems/work_terrain.md`, `architecture/CONVENTIONS.md`, при runtime → `systems/LOD.md`
+   - **LOD старт на паде** → сначала `systems/LOD_BASELINE_PAD_START.md` (🔒 не переписывать split/merge «улучшая» кольца)
+   - суточное кручение Земли / терминатор / полёт vs карта → `systems/PLANET_SPIN.md`
+   - океан / вода → `systems/OCEAN.md`
+   - атмосфера / облака (визуал) → `systems/ATMOSPHERE_CLOUDS.md`
+   - VAB → `systems/VAB_DEVELOPMENT.md`, `systems/CONTROLS.md`
+   - ReStock Editor → `systems/RESTOCK_PIPELINE.md`
+   - орбитальная физика / ограничения → `architecture/PHYSICS_EXPECTATIONS.md`
+   - навигация в коде → `architecture/PROJECT_LAYOUT.md`, `systems/UNITY_ENTRY_POINTS.md`
+3. **Код** — сверять с репозиторием; при расхождении заметка vs код — верить коду.
+4. **Фиксация** — после **значимого** шага (не каждый микрофикс):
+   - обновить статус в `context/roadmap/PROGRESS.md`;
+   - одна строка в `context/roadmap/CHANGELOG.md` (дата, шаг, результат).
+
+## 3. Документация
+
+- Новые заметки в `context/` — wikilinks Obsidian: `[[architecture/ARCHITECTURE_RULES]]` или `[[systems/LOD.md]]`.
+- Не менять структуру папок `context/` без явного запроса пользователя.
+- Не раздувать `PROGRESS.md` — детали в тематических `systems/` / `architecture/`.
+- Не создавать `.md` в `context/` без запроса (кроме обновления статуса/changelog по п.4).
+
+## 4. Якорь для нового чата
+
+```
+@context/architecture/AI_CONTEXT.md @context/roadmap/PROGRESS.md
+Space Program. Unity only. SimulationConsole заморожен.
+```

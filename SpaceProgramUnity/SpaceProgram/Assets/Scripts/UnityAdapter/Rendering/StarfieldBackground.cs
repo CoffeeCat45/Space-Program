@@ -13,6 +13,16 @@ public class StarfieldBackground : MonoBehaviour
 
     public void Setup(Camera targetCamera)
     {
+        if (GalaxySkyboxEnvironment.TryApply(targetCamera))
+        {
+            if (starParticles != null)
+            {
+                starParticles.Stop();
+            }
+
+            return;
+        }
+
         if (targetCamera != null)
         {
             targetCamera.clearFlags = CameraClearFlags.SolidColor;
@@ -76,14 +86,7 @@ public class StarfieldBackground : MonoBehaviour
 
     Material CreateStarMaterial()
     {
-        Shader shader = Shader.Find("Particles/Standard Unlit");
-
-        if (shader == null)
-        {
-            shader = Shader.Find("Sprites/Default");
-        }
-
-        return new Material(shader);
+        return RuntimeMaterialFactory.CreateParticleMaterial(Color.white);
     }
 
     Vector3 RandomDirection(System.Random random)
