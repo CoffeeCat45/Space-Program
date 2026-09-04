@@ -12,7 +12,8 @@ alwaysApply: true
 - **Канон кода** (double, Core/Unity, timestep): `context/architecture/ARCHITECTURE_RULES.md` — проверять **перед** правками `.cs`.
 - **Текущий фокус и статусы задач** — только `context/roadmap/PROGRESS.md` (не выдумывать статусы из других файлов).
 - **Процесс с пользователем** (`делай`, чаты, якорь): `context/architecture/WORKING_WITH_USER.md`.
-- `SimulationConsole/` — заморожен; разработка и проверка только Unity Play mode.
+- `SimulationConsole/` — заморожен, не в git; разработка и проверка только Unity Play mode.
+- Датасеты (Planet/MapMode/RSS DDS) только локально; на GitHub — код. Список: `GITHUB_HEAVY_FILES.md`.
 
 ### Карта папок
 

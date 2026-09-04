@@ -14,23 +14,28 @@
 
 | Путь | Роль |
 |------|------|
-| `SimulationConsole\` | ⚠️ **заморожен** — не использовать для тестов |
+| `context\` | База знаний (Obsidian) |
 | `SpaceProgramUnity\SpaceProgram\` | Unity-проект (сцены, ассеты, `Assets/Scripts/`) |
 | `SpaceProgramUnity\SpaceProgram\Assets\Scripts\SimulationCore\` | Физика и состояние мира, **без Unity** |
 | `SpaceProgramUnity\SpaceProgram\Assets\Scripts\UnityAdapter\` | Визуал, ввод, VAB, flight views |
 | `SpaceProgramUnity\SpaceProgram\Assets\Scripts\EarthSandbox\` | Изолированная песочница terrain/LOD (`Earth_Sandbox_Test`) |
-| `Pipeline\Parts\` | `*.partimport.json` — конфиги ReStock-частей для Editor pipeline |
-| `Pipeline\Blender\` | Export `.mu` → OBJ/PNG (вне Unity) |
-| `ReStock\` | Исходные KSP `.mu` и текстуры мода |
+| `Tools\` | Утилиты (например GEBCO stitcher), не рантайм игры |
+| `SimulationServer\` | Lockstep-сервер (исходники; `publish/` не в git) |
+| `SimulationConsole\` | ⚠️ **заморожен**, **не в git** — не использовать для тестов |
+| `Не используемые\` | Архив: `ReStock/`, `Pipeline/`, старый RSS/TIFF — игра не читает |
+| `файлы луны\` | Сырьё LROC/TIFF; в игре png + `moon_elevation.raw` |
+| `Build\` | Локальный Windows-плеер, не в git |
 
-Unity-проект живёт **внутри** репозитория. Не использовать старые пути вне этой структуры.
+Unity-проект живёт **внутри** репозитория. GitHub — **код и доки без датасетов** (карты/высоты/DDS только на этом ПК). См. `GITHUB_HEAVY_FILES.md`.
+
+**ReStock / Pipeline:** исходники `.mu` и Blender-скрипты — в `Не используемые\ReStock` и `Не используемые\Pipeline`. В игре уже `Assets/Prefabs/Parts`. Повторный импорт — [[systems/RESTOCK_PIPELINE.md]].
 
 **Ships (чертежи VAB):** рядом с Unity root; в `.exe` ещё копия в StreamingAssets:
 
 - Editor: `SpaceProgramUnity\SpaceProgram\Ships\*.json`
 - Логика: `VabFileSystem.GameDirectory` = родитель `Assets/` (`Application.dataPath/../`); плеер также читает `StreamingAssets/Ships`
 - Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources
-- RSS DDS (`Assets/Content/Environment/…`) в Editor читаются с диска; в плеер копируются в `StreamingAssets/Content/` при Build
+- RSS DDS (`Assets/Content/Environment/…`) в Editor читаются с диска; в плеер копируются в `StreamingAssets/Content/` при Build. **Не в git.**
 
 ---
 
@@ -177,11 +182,11 @@ Map / SoI / dev toggles — [[systems/MAP_MODE_ORBIT_SOI.md]].
 
 ### SimulationConsole
 
+Локальная папка, **gitignore**. Не запускать, не коммитить.
 
 | Сущность       | Тип    | Файл         | Назначение                                             |
 | -------------- | ------ | ------------ | ------------------------------------------------------ |
-| `Program`      | class  | `Program.cs` | Main, ASCII-визуализация, orbit test, stability report |
-| `ControlInput` | struct | `Program.cs` | thrust, previewDeltaV, apply/clear maneuver flags      |
+| `Program`      | class  | `Program.cs` | Main, ASCII-визуализация (архив) |
 
 
 
@@ -241,7 +246,7 @@ Map / SoI / dev toggles — [[systems/MAP_MODE_ORBIT_SOI.md]].
 | `VabSceneEnvironment`     | MonoBehaviour | `Vab/VabSceneEnvironment.cs`                      | Маркер ангара; высота/точка spawn первой детали                            |
 | `VabSceneCleanup`         | Editor static | `Editor/VabSceneCleanup.cs`                       | Меню удаления missing scripts с KSP-пропов                                 |
 | `ReStockImportPipeline`   | Editor static | `Editor/ReStockImportPipeline.cs`               | Reimport OBJ, rebuild `.mat`, сборка префабов, UV flip, material mapping   |
-| `ReStockBatchParts`       | static class  | `Editor/ReStockBatchParts.cs`                     | Part definitions из Pipeline/Parts + manifest + merge `manifest.json`                             |
+| `ReStockBatchParts`       | static class  | `Editor/ReStockBatchParts.cs`                     | Part definitions из архива `Не используемые/Pipeline/Parts` + manifest                            |
 | `ReStockPilotEditorMenus` | Editor static | `Editor/ReStockPilotEditorMenus.cs`               | Меню **ReStock → 8/9/10**                                                  |
 | `ReStockModelImportPostprocessor` | class | `Editor/ReStockImportPipeline.cs` (nested) | `AssetPostprocessor`: UV flip, import settings для pilot OBJ               |
 

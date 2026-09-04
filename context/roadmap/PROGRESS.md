@@ -1,5 +1,6 @@
 # Space Program — Бортовой журнал
 
+> **Версия:** 0.1.0-alpha (2026-09-04) — что можно / что сырое: [[CHANGELOG.md]]
 > Живой план и статусы кластеров. Обновлять после каждого значимого шага.
 > Стартовый хаб: [[architecture/AI_CONTEXT.md|AI_CONTEXT]] · История: [[CHANGELOG.md|Полный Changelog]]
 > Архитектурный канон: [[architecture/ARCHITECTURE_RULES.md]]
@@ -37,6 +38,8 @@
 **Проверка:** Play → «С мыса» → `test` · ракета на решётке pad · камера на корпус · HUD mass ~10450 kg · нет `Block_*` мусора.
 
 **.exe = тот же контент, что Editor:** сборка `Space Program → Build Windows Player`. GEBCO-высоты + LocalChunks PNG; Earth splat из RSS-Terrain если pack на диске. Max LOD **не** поднимать автоматом до 15 на паде (L15 = просадка FPS и прыжки высот). Слайдер Terrain Graphics; эталон пада `capL=8`. Слайд −Y = physics altitude, не interpolated COM.
+
+**GitHub:** код без датасетов (`develop` → `CoffeeCat45/test1`). Карты/`.raw`/DDS только на этом ПК. `SimulationConsole` не в git.
 
 ---
 

@@ -73,7 +73,7 @@
 | Слой | Путь | Роль | Unity |
 |------|------|------|-------|
 | **SimulationCore** | `Assets/Scripts/SimulationCore/` | Физика, орбитальная математика, состояние мира | **Нет** |
-| **SimulationConsole** | `SimulationConsole/` | ⚠️ **ЗАМОРОЖЕН** | **Нет** |
+| **SimulationConsole** | `SimulationConsole/` (локально, не в git) | ⚠️ **ЗАМОРОЖЕН** | **Нет** |
 | **UnityAdapter** | `Assets/Scripts/UnityAdapter/` | Визуал, ввод, камера, HUD, VAB | **Да** |
 | **EarthSandbox** | `Assets/Scripts/EarthSandbox/` | Изолированная terrain/LOD песочница | **Да** |
 

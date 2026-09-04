@@ -10,7 +10,8 @@
 4. Читать **целевые** файлы (`context/systems/LOD.md`, `LOD_BASELINE_PAD_START.md` 🔒, `work_terrain.md`, …), не всю `context/`.
 5. `context/history/` и `context/deferred/` — архив, не живой план.
 6. После значимого шага: обновить `PROGRESS.md` + строка в `CHANGELOG.md`.
-7. `SimulationConsole` — не использовать. Проверка — Unity Play mode.
+7. `SimulationConsole` — не использовать (не в git). Проверка — Unity Play mode.
+8. Датасеты планет не в git — см. `GITHUB_HEAVY_FILES.md`.
 
 Якорь нового чата:
 @context/architecture/AI_CONTEXT.md @context/roadmap/PROGRESS.md

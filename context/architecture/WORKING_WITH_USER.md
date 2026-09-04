@@ -22,7 +22,9 @@
 - аккуратные большие шаги
 - минимальное дублирование кода
 
-**Проверка:** только Unity Play mode. `SimulationConsole` не использовать.
+**Проверка:** только Unity Play mode. `SimulationConsole` не использовать (папка локальная, не в git).
+
+Карты/высоты/DDS на GitHub нет — Play на чужом клоне без `StreamingAssets/Planet` и RSS не покажет землю. См. `GITHUB_HEAVY_FILES.md`.
 
 ---
 
@@ -68,5 +70,5 @@
 
 ```
 @architecture/AI_CONTEXT.md @roadmap/PROGRESS.md
-Space Program. Unity only. SimulationConsole заморожен.
+Space Program. Unity only. SimulationConsole заморожен. Датасеты не в git.
 ```

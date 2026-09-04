@@ -27,7 +27,9 @@
 
 Журнал может отставать от кода — при расхождении сверять с репозиторием и Play mode.
 
-`SimulationConsole` — заморожен. Разработка и проверка — только Unity Play mode.
+`SimulationConsole` — заморожен, не в git. Разработка и проверка — только Unity Play mode.
+
+Высоты GEBCO/LDEM, PNG карт и RSS DDS живут **на диске** (`StreamingAssets/Planet`, `MapMode`, `Content/…`). На GitHub их нет — клон без этих папок не нарисует землю. Список: `GITHUB_HEAVY_FILES.md`.
 
 ---
 
@@ -59,3 +61,4 @@
 | NASA/GEBCO заметки | [[systems/EARTH_TERRAIN_NOTES]] |
 | Бинды | [[systems/CONTROLS]] |
 | Map / orbit focus / SoI | [[systems/MAP_MODE_ORBIT_SOI]] |
+| GitHub vs датасеты (корень репо) | `GITHUB_HEAVY_FILES.md` |

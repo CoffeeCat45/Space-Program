@@ -45,6 +45,7 @@
 Закрытые планы, проблемы и попытки.
 
 - [[history/README.md]]
+- [[history/planet_visual_reference_frames.md]] — архив: handoff / FromTo / shader-spin
 - [[history/lod_problem.md]]
 - [[history/test_earth_sandbox_roadmap.md]]
 - [[history/terrain_plan.md]]

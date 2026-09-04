@@ -2,6 +2,8 @@
 
 Импорт 3D-деталей из мода ReStock (KSP .mu) для VAB — только Editor, не трогает SimulationCore.
 
+Исходники `.mu` и `Pipeline/` — в `Не используемые/` (не в git). В Play нужны префабы `Assets/Prefabs/Parts`. Пути `ReStock/Assets/` и `Pipeline/` ниже — как до архива; вернуть папки из архива, если снова печь импорт.
+
 Связанные заметки: [[systems/VAB_DEVELOPMENT.md]], [[architecture/PROJECT_LAYOUT.md]].
 
 ---

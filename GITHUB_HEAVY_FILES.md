@@ -1,20 +1,22 @@
-# Что попадёт на GitHub (следующий коммит)
+# GitHub vs диск
 
-GitHub **уже подключён**: `origin` → `https://github.com/CoffeeCat45/test1.git`, ветка `develop` (сейчас `origin/develop` = `0.0.7`).
-
-Коммит **этим промптом не делается**. Датасеты, карты и картинки остаются только на диске (`.gitignore`).
+Origin: `https://github.com/CoffeeCat45/test1.git`, ветка `develop` (`b590226` — код без датасетов). Переименование репо в Settings GitHub (пробел в имени нельзя; лучше `Space-Program`).
 
 Лимит GitHub: **100 МБ на файл**. Без LFS туда нельзя класть GEBCO/LDEM `.raw`.
 
+После клона **без локальных карт Play не нарисует землю/луну/splat** — это ожидаемо.
+
+`StreamingAssets/Ships/` **не** игнорируется (JSON чертежей, килобайты).
+
 ---
 
-## Не попадёт (gitignore + локальные архивы)
+## Не в git (только этот ПК)
 
 | Что | Зачем на ПК |
 |-----|-------------|
 | `Build/` (~9 ГБ) | Собранный `.exe` |
 | `Library/` (~3 ГБ) | Кеш Unity |
-| `Не используемые/` (~7 ГБ) | Старый RSS/ReStock/TIFF |
+| `Не используемые/` (~7 ГБ) | Старый RSS/ReStock/TIFF, `Pipeline/` |
 | `файлы луны/` (~405 МБ) | Сырьё LROC |
 | `StreamingAssets/Planet/` (~8 ГБ) | Высоты Земли/Луны `.raw` / `.bin` |
 | `StreamingAssets/MapMode/` (~132 МБ) | PNG карт и облаков |
@@ -27,15 +29,9 @@ GitHub **уже подключён**: `origin` → `https://github.com/CoffeeCat
 | `SimulationConsole/` | Замороженная консоль, в Play не нужна |
 | `Без названия.canvas` | Локальный черновик |
 
-После клона **без этих папок Play на чужой машине не покажет землю/луну/текстуры деталей** — это ожидаемо.
-
-`StreamingAssets/Ships/` **не** игнорируется (JSON чертежей, килобайты).
-
 ---
 
-## Попадёт (код, настройки, доки)
-
-Если в следующем промпте сделать `git add` по рабочему дереву с этим ignore:
+## На GitHub (код, настройки, доки)
 
 - `context/` — база знаний
 - `GITHUB_HEAVY_FILES.md`, `.gitignore`, `.cursorrules`
@@ -47,12 +43,3 @@ GitHub **уже подключён**: `origin` → `https://github.com/CoffeeCat
 - `Ships/*.json`
 - `Tools/` (скрипты, не GEBCO-тайлы)
 - `SimulationServer/` исходники (без `publish/` и `bin/`)
-- правки уже tracked-файлов (`Simulation.cs`, HUD, и т.д.)
-
-Типичный размер такого коммита — **десятки МБ**, не гигабайты.
-
----
-
-## Как проверить GitHub
-
-Следующим промптом: коммит на `develop` и `git push origin develop`. Если push пройдёт — репозиторий живой. Сообщение можно короткое, без длинного описания.
