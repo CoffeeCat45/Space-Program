@@ -7,6 +7,7 @@ Shader "SpaceProgram/EarthPlanetSurface"
         _FallbackColor ("Fallback Color", Color) = (0.2, 0.6, 1.0, 1.0)
         _ColorTint ("Color Tint", Color) = (1.15, 1.15, 1.15, 1.0)
         _NormalStrength ("Normal Strength", Range(0, 2)) = 0.35
+        [Enum(Off, 0, On, 1)] _ZWrite ("ZWrite", Float) = 1
     }
 
     SubShader
@@ -23,6 +24,8 @@ Shader "SpaceProgram/EarthPlanetSurface"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
             Cull Back
+            ZWrite [_ZWrite]
+            ZTest LEqual
             Offset 1, 2
 
             HLSLPROGRAM

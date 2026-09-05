@@ -42,20 +42,39 @@ public static class PlanetDistantVisualPolicy
     public const float DistantSecondaryFarClipFill = 0.62f;
 
     /// <summary>
-    /// Place a secondary globe (Earth from the Moon) this close so the far limb
-    /// stays well inside the flight far clip and the depth buffer can resolve the disk.
-    /// Angular size is preserved by the same scale on radius.
+    /// Legacy near-sky pull (Earth-from-Moon). Do not use: 120 km sits on the lunar
+    /// horizon distance and the disk wins ZTest against the Moon.
     /// </summary>
     public const float DistantSecondaryTargetCenterMeters = 120_000f;
 
     public const float AtmosphereShellHeightMeters = 115000f;
 
     /// <summary>
-    /// Flight distant Moon/Earth globe: after atmosphere (3000), before clouds (3200).
-    /// Day sky is ~98% opaque and ZWrite Off; Geometry-queue Moon sits behind it.
+    /// Flight distant Moon/Earth globe: after local atmosphere (3000), before clouds (3200).
     /// Terrain still occludes via ZTest. Do not use 120 km pull (disk in front of Earth).
     /// </summary>
     public const int FlightDistantGlobeRenderQueue = 3050;
+
+    /// <summary>
+    /// Thin distant Earth limb after the globe (3050), before clouds (3200).
+    /// Not the 115 km flight shell — that reads as a bubble from the Moon.
+    /// </summary>
+    public const int FlightDistantAtmosphereRenderQueue = 3070;
+
+    /// <summary>
+    /// Visible Chapman rim from the Moon (~2% of 1:10 Earth radius). Interior
+    /// flight shell stays <see cref="AtmosphereShellHeightMeters"/>.
+    /// </summary>
+    public const float DistantLimbHeightMeters = 12_000f;
+
+    /// <summary>
+    /// Cloud shell on a distant Earth. 1.8 km is below far-clip depth precision
+    /// at lunar distance; 8 km still reads as weather on the disk.
+    /// </summary>
+    public const float DistantCloudHeightMeters = 8_000f;
+
+    /// <summary>Flight Chapman, slightly stronger than pad limb — not map 0.014.</summary>
+    public const float DistantLimbStrength = 0.00008f;
 
     public static GlobeQuality ResolveGlobeQuality(float altitudeMeters, GlobeQuality current)
     {
@@ -150,14 +169,16 @@ public static class PlanetDistantVisualPolicy
     }
 
     /// <summary>
-    /// Scaled-space shrink for a globe that is not the LOD body.
-    /// <paramref name="pullToNearSky"/> is for Earth-from-Moon (large disk in the sky).
-    /// Moon-from-Earth stays at true range so flight, map, and SoI share one geometry.
+    /// Clip-only shrink for a globe that is not the LOD body. Angular size is
+    /// unchanged. Never pull to <see cref="DistantSecondaryTargetCenterMeters"/>:
+    /// that puts Earth on the lunar horizon and the disk draws through the Moon.
+    /// Moon-from-Earth and Earth-from-Moon share this path.
     /// </summary>
     public static float GetDistantSecondaryScale(
         float centerDistance,
         float visualRadius,
-        bool pullToNearSky = true
+        bool pullToNearSky = false,
+        float atmospherePaddingMeters = 0f
     )
     {
         if (centerDistance <= 1f || !float.IsFinite(centerDistance))
@@ -165,16 +186,19 @@ public static class PlanetDistantVisualPolicy
             return 1f;
         }
 
-        float farLimb = centerDistance + Mathf.Max(1f, visualRadius);
+        float farLimb = centerDistance +
+            Mathf.Max(1f, visualRadius) +
+            Mathf.Max(0f, atmospherePaddingMeters);
         float clipBudget =
             WorldVisualBridge.FlightCameraFarClip * DistantSecondaryFarClipFill;
         float scaleByClip = farLimb > clipBudget && farLimb > 1f ?
             clipBudget / farLimb :
             1f;
+        scaleByClip = Mathf.Clamp(scaleByClip, 0.002f, 1f);
 
         if (!pullToNearSky)
         {
-            return 1f;
+            return scaleByClip;
         }
 
         float scaleByDistance = DistantSecondaryTargetCenterMeters / centerDistance;

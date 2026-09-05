@@ -8,13 +8,12 @@ using UnityEngine;
 /// </summary>
 static class PlanetElevationEditorPrefs
 {
-    const string UseHighResPlayerPrefsKey = "SpaceProgram.PlanetElevation.UseHighResRaw";
-
     [MenuItem("Space Program/Planet Elevation/Use High-Res GEBCO Raw (.raw)")]
     static void EnableHighResRaw()
     {
-        PlayerPrefs.SetInt(UseHighResPlayerPrefsKey, 1);
-        PlayerPrefs.Save();
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsStore.Data.graphics.useHighResElevation = true;
+        GameSettingsStore.SaveToDisk();
         Debug.Log(
             "Planet elevation: high-res GEBCO raw enabled for Play Mode. " +
             "Press Play and look for PlanetElevationBootstrap log with UseHighResElevation=True."
@@ -24,8 +23,9 @@ static class PlanetElevationEditorPrefs
     [MenuItem("Space Program/Planet Elevation/Use Legacy Elevation (.bin)")]
     static void EnableLegacyBin()
     {
-        PlayerPrefs.SetInt(UseHighResPlayerPrefsKey, 0);
-        PlayerPrefs.Save();
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsStore.Data.graphics.useHighResElevation = false;
+        GameSettingsStore.SaveToDisk();
         Debug.Log(
             "Planet elevation: legacy .bin enabled for Play Mode. " +
             "Press Play and look for UseHighResElevation=False in PlanetElevationBootstrap log."
@@ -40,13 +40,14 @@ static class PlanetElevationEditorPrefs
         string binPath = Path.Combine(planetFolder, PlanetSurfaceConstants.ElevationBinaryFileName);
         bool rawExists = File.Exists(rawPath);
         bool binExists = File.Exists(binPath);
-        int stored = PlayerPrefs.GetInt(UseHighResPlayerPrefsKey, binExists ? 0 : 1);
-        bool useHighRes = stored == 1;
+        GameSettingsStore.EnsureLoaded();
+        bool useHighRes = GameSettingsStore.Data.graphics.useHighResElevation;
 
         Debug.Log(
             "Planet terrain settings:\n" +
-            "  elevation: " + UseHighResPlayerPrefsKey + " = " + stored +
-            " (" + (useHighRes ? "high-res .raw" : "legacy .bin") + ")\n" +
+            "  settings: " + GameSettingsStore.FilePath + "\n" +
+            "  elevation: useHighResElevation = " +
+            (useHighRes ? "true (high-res .raw)" : "false (legacy .bin)") + "\n" +
             "  pipeline: GEBCO-only (heights GEBCO; splat still from RSS-Terrain) = " +
             PlanetTerrainPipelineSettings.UseGebcoOnlyPipeline + "\n" +
             "  earth_elevation.raw: " + (rawExists ? "found" : "MISSING") + "\n" +
@@ -57,7 +58,8 @@ static class PlanetElevationEditorPrefs
     [MenuItem("Space Program/Planet Elevation/GEBCO-Only Pipeline (recommended)")]
     static void EnableGebcoOnlyPipeline()
     {
-        PlayerPrefs.SetInt(UseHighResPlayerPrefsKey, 1);
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsStore.Data.graphics.useHighResElevation = true;
         PlanetTerrainPipelineSettings.UseGebcoOnlyPipeline = true;
         Debug.Log(
             "Planet terrain: GEBCO-only pipeline ON. " +

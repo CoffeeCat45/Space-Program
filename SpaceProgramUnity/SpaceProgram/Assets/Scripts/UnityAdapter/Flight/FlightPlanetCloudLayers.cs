@@ -49,6 +49,7 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
     static readonly int LayerKindShaderId = Shader.PropertyToID("_LayerKind");
     static readonly int OrbitViewShaderId = Shader.PropertyToID("_OrbitView");
     const string ThinLayerKeyword = "_CLOUD_THIN";
+    const int CloudRenderQueue = 3200;
 
     Transform lowLayer;
     Transform highLayer;
@@ -69,6 +70,8 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
     int lastHighCull = -1;
 
     float shellAltitudeScale = 1f;
+    bool distantGlobeLook;
+    bool distantShellHeightApplied;
 
     public void Build(float planetRadius)
     {
@@ -79,6 +82,8 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
     {
         planetRadiusMeters = planetRadius;
         shellAltitudeScale = Mathf.Max(1e-8f, altitudeScale);
+        distantGlobeLook = false;
+        distantShellHeightApplied = false;
         simpleShader = SpaceProgramShaders.Find("SpaceProgram/PlanetClouds");
         experimentalShader = SpaceProgramShaders.Find("SpaceProgram/PlanetCloudsExperimental");
         nasaShader = SpaceProgramShaders.Find("SpaceProgram/PlanetCloudsNasa");
@@ -221,10 +226,11 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
 
         if (highLayer != null)
         {
-            highLayer.gameObject.SetActive(!PlanetLodSettings.UsesNasaStaticCloudLook);
+            highLayer.gameObject.SetActive(!HideHighCloudLayer());
         }
 
         ApplyOrbitViewToMaterials();
+        ForceCloudRenderQueue();
     }
 
     public void ApplyRenderLayer(bool mapMode)
@@ -254,10 +260,11 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
 
         if (highLayer != null)
         {
-            highLayer.gameObject.SetActive(!PlanetLodSettings.UsesNasaStaticCloudLook);
+            highLayer.gameObject.SetActive(!HideHighCloudLayer());
         }
 
         gameObject.SetActive(true);
+        ForceCloudRenderQueue();
     }
 
     public void SyncAnimation(double simulationTimeSeconds)
@@ -281,7 +288,9 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
     }
 
     /// <summary>
-    /// Distant Earth from another body: always the NASA cloud PNG when the file exists.
+    /// Distant Earth keeps the player's cloud mode (including NASA PNG+).
+    /// Assigning a shader resets renderQueue to the shader tag (3010), which
+    /// draws under the globe (3050) and the disk covers the weather.
     /// </summary>
     public void PreferNasaMapForDistantGlobe()
     {
@@ -290,36 +299,39 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
             return;
         }
 
-        NasaCloudMapResources.EnsureLoaded();
+        distantGlobeLook = true;
+        ApplyDetailLevel(PlanetLodSettings.CloudDetail);
+        ForceCloudRenderQueue();
 
-        if (NasaCloudMapResources.Map == null)
+        if (!distantShellHeightApplied)
         {
-            return;
+            distantShellHeightApplied = true;
+            activeSubdivisions = -1;
+            RebuildMeshesForDetail(PlanetLodSettings.CloudDetail);
+            ForceCloudRenderQueue();
         }
-
-        Shader nasa = nasaShader != null ?
-            nasaShader :
-            SpaceProgramShaders.Find("SpaceProgram/PlanetCloudsNasa");
-
-        if (nasa != null)
-        {
-            if (lowMaterial != null)
-            {
-                lowMaterial.shader = nasa;
-            }
-
-            if (highMaterial != null)
-            {
-                highMaterial.shader = nasa;
-            }
-        }
-
-        ApplyNasaLookToMaterial(lowMaterial, 1f);
-        ApplyNasaLookToMaterial(highMaterial, 1f);
 
         if (highLayer != null)
         {
-            highLayer.gameObject.SetActive(false);
+            highLayer.gameObject.SetActive(!HideHighCloudLayer());
+        }
+    }
+
+    bool HideHighCloudLayer()
+    {
+        return PlanetLodSettings.UsesNasaStaticCloudLook;
+    }
+
+    void ForceCloudRenderQueue()
+    {
+        if (lowMaterial != null)
+        {
+            lowMaterial.renderQueue = CloudRenderQueue;
+        }
+
+        if (highMaterial != null)
+        {
+            highMaterial.renderQueue = CloudRenderQueue;
         }
     }
 
@@ -336,7 +348,10 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
 
     float ScaledLowAltitudeMeters()
     {
-        return LowAltitudeMeters * shellAltitudeScale;
+        float meters = distantGlobeLook ?
+            PlanetDistantVisualPolicy.DistantCloudHeightMeters :
+            LowAltitudeMeters;
+        return meters * shellAltitudeScale;
     }
 
     float ScaledHighAltitudeMeters()
@@ -573,6 +588,8 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
             lastLowCull = -1;
             lastHighCull = -1;
         }
+
+        ForceCloudRenderQueue();
     }
 
     void ApplyOrbitViewToMaterials()
@@ -726,7 +743,7 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
         {
             name = materialName,
         };
-        material.renderQueue = 3200;
+        material.renderQueue = CloudRenderQueue;
         material.SetColor("_CloudColor", color);
         material.SetColor("_BaseColor", color);
         material.SetFloat("_NoiseScale", noiseScale);
@@ -770,6 +787,7 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
         meshRenderer.enabled = true;
         meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         meshRenderer.receiveShadows = false;
+        meshRenderer.allowOcclusionWhenDynamic = false;
         meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
         layer.localScale = Vector3.one;
         layer.gameObject.SetActive(true);

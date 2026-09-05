@@ -1,6 +1,6 @@
 /// <summary>
 /// Visual cloud backend. Look sliders belong to SimpleShells or Experimental;
-/// their PlayerPrefs stay when the mode changes. NasaPng / NasaPngEnhanced use clouds-alpha.png.
+/// their look sliders stay when the mode changes. NasaPng / NasaPngEnhanced use clouds-alpha.png.
 /// </summary>
 public enum CloudRendererMode
 {

@@ -366,8 +366,25 @@ public sealed class FlightPlanetSphere : MonoBehaviour
     {
         activeInstance = this;
         enabled = true;
+        EnsureComponents();
+        DisableLegacyPlanetMesh();
+        altitudeShellState.ShellMeshReady = false;
+        RefreshOwnedShellsAfterLodSwap();
         SetOwnedLodVisualsActive(true);
         RequestViewerLodBootstrap();
+    }
+
+    void RefreshOwnedShellsAfterLodSwap()
+    {
+        if (CelestialTerrainRuntime.IsMoon)
+        {
+            DisableCloudLayers();
+            DisableAtmosphereSphere();
+            return;
+        }
+
+        EnsureCloudLayers();
+        EnsureAtmosphereSphere();
     }
 
     void SetOwnedLodVisualsActive(bool visible)
@@ -379,7 +396,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
 
         if (mapSphereRoot != null)
         {
-            mapSphereRoot.gameObject.SetActive(visible && mapModeActive);
+            mapSphereRoot.gameObject.SetActive(
+                visible && (mapModeActive || altitudeShellState.ShellVisible)
+            );
         }
 
         if (cloudLayers != null)
@@ -459,28 +478,32 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         viewerVelocitySim = velocitySimMetersPerSecond;
         this.viewerWorldPosition = viewerWorldPosition;
 
-        if (quadtree == null)
+        if (quadtree != null)
         {
-            return;
+            quadtree.ViewerAltitudeMeters = viewerAltitudeMeters;
+            quadtree.ViewerWorldPosition = viewerWorldPosition;
+            quadtree.HasViewerWorldAnchor = true;
+            quadtree.ViewerVelocityWorld = viewerVelocityWorld;
+            quadtree.ViewerVelocitySim = viewerVelocitySim;
+
+            if (viewerFocusDirectionSim.sqrMagnitude > 0.25f)
+            {
+                quadtree.ViewerFocusDirectionSim = viewerFocusDirectionSim.normalized;
+            }
+
+            float speed = velocitySimMetersPerSecond.magnitude;
+            runtimeLookAheadSeconds = speed > 80f ?
+                Mathf.Clamp(28000f / speed, 2.5f, 12f) :
+                viewerLookAheadSeconds;
+            quadtree.ViewerLookAheadSeconds = runtimeLookAheadSeconds;
         }
 
-        quadtree.ViewerAltitudeMeters = viewerAltitudeMeters;
-        quadtree.ViewerWorldPosition = viewerWorldPosition;
-        quadtree.HasViewerWorldAnchor = true;
-        quadtree.ViewerVelocityWorld = viewerVelocityWorld;
-        quadtree.ViewerVelocitySim = viewerVelocitySim;
-
-        if (viewerFocusDirectionSim.sqrMagnitude > 0.25f)
-        {
-            quadtree.ViewerFocusDirectionSim = viewerFocusDirectionSim.normalized;
-        }
-
-        float speed = velocitySimMetersPerSecond.magnitude;
-        runtimeLookAheadSeconds = speed > 80f ?
-            Mathf.Clamp(28000f / speed, 2.5f, 12f) :
-            viewerLookAheadSeconds;
-        quadtree.ViewerLookAheadSeconds = runtimeLookAheadSeconds;
         UpdateOceanVisibility();
+
+        if (!mapModeActive)
+        {
+            UpdateAltitudeShellPresentation();
+        }
     }
 
     public void SetViewerMotion(
@@ -649,7 +672,12 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             return;
         }
 
-        mapSphere.Build(scaledSpaceMaterial, planetRadius, subdivisions);
+        mapSphere.Build(
+            scaledSpaceMaterial,
+            planetRadius,
+            subdivisions,
+            applyScaledSpaceLayer: mapModeActive
+        );
         appliedGlobeSubdivisions = subdivisions;
 
         if (mapSphereRoot != null)
@@ -800,6 +828,12 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             }
 
             ApplyMapShellTint();
+            if (scaledSpaceMaterial != null)
+            {
+                scaledSpaceMaterial.SetFloat("_ZWrite", 1f);
+                scaledSpaceMaterial.SetOverrideTag("RenderType", "Opaque");
+            }
+
             SyncDistantShellPresentation();
         }
         else if (mapSphereRoot != null)
@@ -1244,7 +1278,12 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         quadtree.ResetAltitudeLodTracking();
         showLodDebug = false;
         quadtree.SetLodDebugVisible(false);
-        mapSphere?.Build(scaledSpaceMaterial, planetRadius);
+        mapSphere?.Build(
+            scaledSpaceMaterial,
+            planetRadius,
+            PlanetDistantVisualPolicy.DefaultShellSubdivisions,
+            applyScaledSpaceLayer: mapModeActive
+        );
         DisableLegacyOceanSphere();
         RefreshEarthColorShaderProperties();
         if (mapModeActive)
@@ -1485,20 +1524,23 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             return;
         }
 
+        if (quadtree != null)
+        {
+            quadtree.ViewerAltitudeMeters = viewerAltitudeMeters;
+            quadtree.ViewerVelocityWorld = viewerVelocityWorld;
+            quadtree.ViewerVelocitySim = viewerVelocitySim;
+            quadtree.ViewerLookAheadSeconds = runtimeLookAheadSeconds;
+        }
+
+        UpdateAltitudeShellPresentation();
+
         if (quadtree == null || !lodUpdatesEnabled)
         {
             return;
         }
 
         quadtree.DispatchCompletedMeshes();
-
-        quadtree.ViewerAltitudeMeters = viewerAltitudeMeters;
-        quadtree.ViewerVelocityWorld = viewerVelocityWorld;
-        quadtree.ViewerVelocitySim = viewerVelocitySim;
-        quadtree.ViewerLookAheadSeconds = runtimeLookAheadSeconds;
-
         SyncViewerLodFocusFromSimulation();
-        UpdateAltitudeShellPresentation();
 
         if (PlanetLodAltitudePolicy.ShouldHideTerrainChunks(altitudeShellState))
         {
@@ -2343,6 +2385,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         }
 
         scaledSpaceMaterial.name = "PlanetScaledSpace";
+        scaledSpaceMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+        scaledSpaceMaterial.SetFloat("_ZWrite", 1f);
+        scaledSpaceMaterial.SetOverrideTag("RenderType", "Opaque");
         scaledSpaceMaterial.SetTexture("_ColorMap", Texture2D.whiteTexture);
         scaledSpaceMaterial.SetColor("_ColorTint", new Color(1.1f, 1.1f, 1.1f, 1f));
         scaledSpaceMaterial.SetColor(

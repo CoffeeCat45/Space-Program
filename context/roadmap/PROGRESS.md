@@ -37,9 +37,9 @@
 
 **Проверка:** Play → «С мыса» → `test` · ракета на решётке pad · камера на корпус · HUD mass ~10450 kg · нет `Block_*` мусора.
 
-**.exe = тот же контент, что Editor:** сборка `Space Program → Build Windows Player`. GEBCO-высоты + LocalChunks PNG; Earth splat из RSS-Terrain если pack на диске. Max LOD **не** поднимать автоматом до 15 на паде (L15 = просадка FPS и прыжки высот). Слайдер Terrain Graphics; эталон пада `capL=8`. Слайд −Y = physics altitude, не interpolated COM.
+**.exe = тот же контент, что Editor:** сборка `Space Program → Build Windows Player`. GEBCO-высоты + LocalChunks PNG; Earth splat из RSS-Terrain если pack на диске. После сборки в корне репо: `ShareBuild/` + `ShareBuild.zip` без карт (скинуть другу); полный `Build/` остаётся у тебя. Max LOD **не** поднимать автоматом до 15 на паде (L15 = просадка FPS и прыжки высот). Слайдер Terrain Graphics; эталон пада `capL=8`. Слайд −Y = physics altitude, не interpolated COM.
 
-**GitHub:** код без датасетов (`develop` → `CoffeeCat45/test1`). Карты/`.raw`/DDS только на этом ПК. `SimulationConsole` не в git.
+**GitHub:** код без датасетов (`develop` → `CoffeeCat45/test1`). Карты/`.raw`/DDS только на этом ПК. `SimulationConsole` не в git. Графика/HUD/dev — `settings.json` рядом с проектом или exe.
 
 ---
 
@@ -75,8 +75,8 @@
 | 2 | Спавн на Луне (меню / Scenarios) для проверки LOD | 🟡 2026-08-25 near side; утро к Солнцу + фаза π |
 | 3 | LOD как у Земли: макро LROC + LDEM; ближний пол = RSS-Terrain Moon splat | 🟡 2026-08-26 LDEM 64 ppd; PNG 4K/8K; close-up Low/Mid/High/Steep |
 | 4 | Cove-площадка на Луне (как на мысе) | 🟡 2026-08-25 pad = signed LDEM (не пьедестал над maria) |
-| 5 | Луна: без «воды», звёзды, метка, Земля с облаками | 🟡 2026-08-30 зыбь выкл (`_HasOcean`); maria≠ocean |
-| 6 | Реальный 1:10 SMA + LOD swap Earth↔Moon mid-flight | 🟡 2026-08-30 SoI без freeze (hibernate PQS); SMA 4.5 Mm |
+| 5 | Луна: без «воды», звёзды, метка, Земля с облаками | 🟡 2026-09-05 PNG+ с Луны: очередь облаков 3200 после смены шейдера, не 3010 под глобусом |
+| 6 | Реальный 1:10 SMA + LOD swap Earth↔Moon mid-flight | 🟡 2026-09-05 Moon→Earth: PNG-шелл LocalPhysics сразу по высоте, не только атмосфера |
 
 ---
 

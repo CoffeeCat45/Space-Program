@@ -26,13 +26,31 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
     Mesh runtimeMesh;
     Material atmosphereMaterial;
     float planetRadiusMeters;
+    float shellHeightMeters = AtmosphereHeightMeters;
+    float shaderAltitudeScale = 1f;
     bool ready;
     bool mapModeActive;
     int lastCull = -1;
 
     public void Build(float planetRadius)
     {
+        Build(planetRadius, 1f);
+    }
+
+    public void Build(float planetRadius, float altitudeScale)
+    {
+        Build(planetRadius, altitudeScale, AtmosphereHeightMeters);
+    }
+
+    /// <param name="altitudeScale">
+    /// 1 on the LOD planet (meters). Distant unit globe uses
+    /// <c>UnitDiameterMeshRadius / Earth.Radius</c> so the shell stays inside parent scale.
+    /// </param>
+    public void Build(float planetRadius, float altitudeScale, float heightMeters)
+    {
         planetRadiusMeters = planetRadius;
+        shaderAltitudeScale = Mathf.Max(1e-8f, altitudeScale);
+        shellHeightMeters = Mathf.Max(1e-8f, heightMeters) * shaderAltitudeScale;
         Shader shader = SpaceProgramShaders.Find("SpaceProgram/EarthAtmosphere");
 
         if (shader == null)
@@ -53,7 +71,7 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
             runtimeMesh = null;
         }
 
-        float outerRadius = planetRadius + AtmosphereHeightMeters;
+        float outerRadius = planetRadius + shellHeightMeters;
         runtimeMesh = FlightPlanetMapSphere.BuildIcosphereMeshPublic(
             IcosphereSubdivisions,
             outerRadius
@@ -64,6 +82,7 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
         meshRenderer.sharedMaterial = atmosphereMaterial;
         meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         meshRenderer.receiveShadows = false;
+        meshRenderer.allowOcclusionWhenDynamic = false;
         meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
         transform.localPosition = Vector3.zero;
         transform.localRotation = Quaternion.identity;
@@ -107,7 +126,7 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
         {
             float scale = Mathf.Max(transform.lossyScale.x, 1e-6f);
             float cameraRadius = Vector3.Distance(cameraWorldPosition, transform.position);
-            inside = cameraRadius < (planetRadiusMeters + AtmosphereHeightMeters) * scale - scale;
+            inside = cameraRadius < (planetRadiusMeters + shellHeightMeters) * scale - scale;
         }
 
         int cull = inside
@@ -156,6 +175,36 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
         ApplyOpacity(DevSettings.AtmosphereOpacity);
     }
 
+    /// <summary>
+    /// Thin exterior rim for a distant Earth globe. Not map-limb (fills the disk)
+    /// and not the 115 km flight shell (bubble from the Moon).
+    /// </summary>
+    public void ApplyDistantLimbLook()
+    {
+        if (atmosphereMaterial == null || mapModeActive)
+        {
+            return;
+        }
+
+        atmosphereMaterial.renderQueue =
+            PlanetDistantVisualPolicy.FlightDistantAtmosphereRenderQueue;
+        atmosphereMaterial.SetFloat("_MapMode", 0f);
+        atmosphereMaterial.SetFloat(
+            LimbStrengthShaderId,
+            PlanetDistantVisualPolicy.DistantLimbStrength
+        );
+        atmosphereMaterial.SetFloat(
+            ExteriorAlphaBehindScaleShaderId,
+            FlightExteriorAlphaBehindScale
+        );
+        atmosphereMaterial.SetFloat(ExteriorAlphaBoostShaderId, 1.2f);
+        atmosphereMaterial.SetFloat(
+            "_CameraAltitude",
+            FlightSkyVisibilitySettings.AtmosphereShellFadeEndAltitudeMeters + 50_000f
+        );
+        ApplyOpacity(DevSettings.AtmosphereOpacity);
+    }
+
     public void ApplyOpacity(float opacity)
     {
         if (atmosphereMaterial == null)
@@ -187,9 +236,9 @@ public sealed class FlightPlanetAtmosphereSphere : MonoBehaviour
         atmosphereMaterial.SetColor("_HorizonColor", new Color(0.80f, 0.88f, 0.96f, 1f));
         atmosphereMaterial.SetColor("_SunsetColor", new Color(0.95f, 0.42f, 0.18f, 1f));
         atmosphereMaterial.SetFloat("_PlanetRadius", planetRadius);
-        atmosphereMaterial.SetFloat("_AtmosphereHeight", AtmosphereHeightMeters);
-        atmosphereMaterial.SetFloat("_ScaleHeight", 900f);
-        atmosphereMaterial.SetFloat("_LimbHeight", 8000f);
+        atmosphereMaterial.SetFloat("_AtmosphereHeight", shellHeightMeters);
+        atmosphereMaterial.SetFloat("_ScaleHeight", 900f * shaderAltitudeScale);
+        atmosphereMaterial.SetFloat("_LimbHeight", 8000f * shaderAltitudeScale);
         atmosphereMaterial.SetFloat("_SkyOpacity", 0.985f);
         atmosphereMaterial.SetFloat("_SkyExtinction", 6.4f);
         atmosphereMaterial.SetFloat("_LimbStrength", FlightLimbStrength);

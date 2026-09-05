@@ -1,21 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// Persistent developer toggles (PlayerPrefs).
+/// Persistent developer toggles (<c>settings.json</c>).
 /// </summary>
 public static class DevSettings
 {
-    const string InfiniteFuelKey = "SpaceProgram.Dev.InfiniteFuel";
-    const string ThrustMultiplierKey = "SpaceProgram.Dev.ThrustMultiplier";
-    const string CloudVisualsDisabledKey = "SpaceProgram.Dev.CloudVisualsDisabled";
-    const string AtmosphereVisualsDisabledKey = "SpaceProgram.Dev.AtmosphereVisualsDisabled";
-    const string AtmosphereOpacityKey = "SpaceProgram.Dev.AtmosphereOpacity";
-    const string PlanetSpinDisabledKey = "SpaceProgram.Dev.PlanetSpinDisabled";
-    const string ShipTrailEnabledKey = "SpaceProgram.Dev.ShipTrailEnabled";
-    const string SoiSphereEnabledKey = "SpaceProgram.Dev.SoiSphereEnabled";
-    const string EarthGeographicMapHigh8KKey = "SpaceProgram.Dev.EarthGeographicMapHigh8K";
-    const string MoonGeographicMapHigh8KKey = "SpaceProgram.Dev.MoonGeographicMapHigh8K";
-
     public const double DefaultThrustMultiplier = 1.0;
     public const double MinThrustMultiplier = 0.01;
     public const double MaxThrustMultiplier = 100.0;
@@ -42,33 +31,27 @@ public static class DevSettings
 
     public static void Load()
     {
-        InfiniteFuel = PlayerPrefs.GetInt(InfiniteFuelKey, 0) == 1;
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsDeveloper developer = GameSettingsStore.Data.developer;
+        InfiniteFuel = developer.infiniteFuel;
         SimulationCheatFlags.InfiniteFuel = InfiniteFuel;
-        CloudVisualsDisabled = PlayerPrefs.GetInt(CloudVisualsDisabledKey, 0) == 1;
-        AtmosphereVisualsDisabled = PlayerPrefs.GetInt(AtmosphereVisualsDisabledKey, 0) == 1;
-        AtmosphereOpacity = Mathf.Clamp01(
-            PlayerPrefs.GetFloat(AtmosphereOpacityKey, 1f)
-        );
-        PlanetSpinDisabled = PlayerPrefs.GetInt(PlanetSpinDisabledKey, 0) == 1;
+        CloudVisualsDisabled = developer.cloudVisualsDisabled;
+        AtmosphereVisualsDisabled = developer.atmosphereVisualsDisabled;
+        AtmosphereOpacity = Mathf.Clamp01(developer.atmosphereOpacity);
+        PlanetSpinDisabled = developer.planetSpinDisabled;
         SimulationCheatFlags.PlanetSpinDisabled = PlanetSpinDisabled;
-        ShipTrailEnabled = PlayerPrefs.GetInt(ShipTrailEnabledKey, 1) == 1;
-        SoiSphereEnabled = PlayerPrefs.GetInt(SoiSphereEnabledKey, 0) == 1;
-        EarthGeographicMapHigh8K = PlayerPrefs.GetInt(EarthGeographicMapHigh8KKey, 0) == 1;
-        MoonGeographicMapHigh8K = PlayerPrefs.GetInt(MoonGeographicMapHigh8KKey, 0) == 1;
-
-        float savedMultiplier = PlayerPrefs.GetFloat(
-            ThrustMultiplierKey,
-            (float)DefaultThrustMultiplier
-        );
-        SetThrustMultiplier(savedMultiplier, persist: false);
+        ShipTrailEnabled = developer.shipTrailEnabled;
+        SoiSphereEnabled = developer.soiSphereEnabled;
+        EarthGeographicMapHigh8K = developer.earthGeographicMapHigh8K;
+        MoonGeographicMapHigh8K = developer.moonGeographicMapHigh8K;
+        SetThrustMultiplier(developer.thrustMultiplier, persist: false);
     }
 
     public static void SetInfiniteFuel(bool enabled)
     {
         InfiniteFuel = enabled;
         SimulationCheatFlags.InfiniteFuel = enabled;
-        PlayerPrefs.SetInt(InfiniteFuelKey, enabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
     }
 
     public static bool TrySetThrustMultiplierFromInput(string input, out double appliedMultiplier)
@@ -108,32 +91,28 @@ public static class DevSettings
 
         if (persist)
         {
-            PlayerPrefs.SetFloat(ThrustMultiplierKey, (float)ThrustMultiplier);
-            PlayerPrefs.Save();
+            Persist();
         }
     }
 
     public static void SetCloudVisualsDisabled(bool disabled)
     {
         CloudVisualsDisabled = disabled;
-        PlayerPrefs.SetInt(CloudVisualsDisabledKey, disabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         FlightPlanetSphere.ApplyRuntimeAtmosphereCloudVisuals();
     }
 
     public static void SetAtmosphereVisualsDisabled(bool disabled)
     {
         AtmosphereVisualsDisabled = disabled;
-        PlayerPrefs.SetInt(AtmosphereVisualsDisabledKey, disabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         FlightPlanetSphere.ApplyRuntimeAtmosphereCloudVisuals();
     }
 
     public static void SetAtmosphereOpacity(float opacity)
     {
         AtmosphereOpacity = Mathf.Clamp01(opacity);
-        PlayerPrefs.SetFloat(AtmosphereOpacityKey, AtmosphereOpacity);
-        PlayerPrefs.Save();
+        Persist();
         FlightPlanetSphere.ApplyRuntimeAtmosphereOpacity();
     }
 
@@ -141,39 +120,51 @@ public static class DevSettings
     {
         PlanetSpinDisabled = disabled;
         SimulationCheatFlags.PlanetSpinDisabled = disabled;
-        PlayerPrefs.SetInt(PlanetSpinDisabledKey, disabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
     }
 
     public static void SetShipTrailEnabled(bool enabled)
     {
         ShipTrailEnabled = enabled;
-        PlayerPrefs.SetInt(ShipTrailEnabledKey, enabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         ShipTrailView.ApplyEnabledStateToAll();
     }
 
     public static void SetSoiSphereEnabled(bool enabled)
     {
         SoiSphereEnabled = enabled;
-        PlayerPrefs.SetInt(SoiSphereEnabledKey, enabled ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         SphereOfInfluenceView.ApplyEnabledStateToAll();
     }
 
     public static void SetEarthGeographicMapHigh8K(bool high8K)
     {
         EarthGeographicMapHigh8K = high8K;
-        PlayerPrefs.SetInt(EarthGeographicMapHigh8KKey, high8K ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         FlightPlanetSphere.ApplyRuntimeEarthGeographicMap();
     }
 
     public static void SetMoonGeographicMapHigh8K(bool high8K)
     {
         MoonGeographicMapHigh8K = high8K;
-        PlayerPrefs.SetInt(MoonGeographicMapHigh8KKey, high8K ? 1 : 0);
-        PlayerPrefs.Save();
+        Persist();
         FlightPlanetSphere.ApplyRuntimeMoonGeographicMap();
+    }
+
+    static void Persist()
+    {
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsDeveloper developer = GameSettingsStore.Data.developer;
+        developer.infiniteFuel = InfiniteFuel;
+        developer.thrustMultiplier = (float)ThrustMultiplier;
+        developer.cloudVisualsDisabled = CloudVisualsDisabled;
+        developer.atmosphereVisualsDisabled = AtmosphereVisualsDisabled;
+        developer.atmosphereOpacity = AtmosphereOpacity;
+        developer.planetSpinDisabled = PlanetSpinDisabled;
+        developer.shipTrailEnabled = ShipTrailEnabled;
+        developer.soiSphereEnabled = SoiSphereEnabled;
+        developer.earthGeographicMapHigh8K = EarthGeographicMapHigh8K;
+        developer.moonGeographicMapHigh8K = MoonGeographicMapHigh8K;
+        GameSettingsStore.SaveToDisk();
     }
 }

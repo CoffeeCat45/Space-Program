@@ -223,8 +223,6 @@ public static class VabGraphicsManager
         };
     }
 
-    const string PrefsKey = "SpaceProgram.GraphicsSettings.v1";
-
     public struct GraphicsSettingsSnapshot
     {
         public bool msaaEnabled;
@@ -260,47 +258,11 @@ public static class VabGraphicsManager
 
     public static void SaveSnapshot(GraphicsSettingsSnapshot snapshot)
     {
-        string payload =
-            (snapshot.msaaEnabled ? 1 : 0) + "|" +
-            snapshot.msaaLevel + "|" +
-            (snapshot.postAaEnabled ? 1 : 0) + "|" +
-            snapshot.postAaMode + "|" +
-            snapshot.postAaQuality;
-
-        PlayerPrefs.SetString(PrefsKey, payload);
-        PlayerPrefs.Save();
+        GameSettingsStore.SetGraphicsQuality(snapshot);
     }
 
     public static bool TryLoadSnapshot(out GraphicsSettingsSnapshot snapshot)
     {
-        snapshot = default;
-
-        if (!PlayerPrefs.HasKey(PrefsKey))
-        {
-            return false;
-        }
-
-        string payload = PlayerPrefs.GetString(PrefsKey, string.Empty);
-        string[] parts = payload.Split('|');
-
-        if (parts.Length < 5)
-        {
-            return false;
-        }
-
-        snapshot = new GraphicsSettingsSnapshot
-        {
-            msaaEnabled = parts[0] == "1",
-            msaaLevel = ParseInt(parts[1], Msaa4x),
-            postAaEnabled = parts[2] == "1",
-            postAaMode = ParseInt(parts[3], PostAaModeFxaa),
-            postAaQuality = ParseInt(parts[4], PostAaQualityMedium),
-        };
-        return true;
-    }
-
-    static int ParseInt(string value, int fallback)
-    {
-        return int.TryParse(value, out int parsed) ? parsed : fallback;
+        return GameSettingsStore.TryGetGraphicsQuality(out snapshot);
     }
 }

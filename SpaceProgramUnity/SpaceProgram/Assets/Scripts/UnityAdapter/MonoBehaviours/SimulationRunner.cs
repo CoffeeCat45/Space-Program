@@ -1329,6 +1329,27 @@ public class SimulationRunner : MonoBehaviour
         return false;
     }
 
+    internal bool TryGetBodyVisualTransform(string bodyName, out Transform bodyTransform)
+    {
+        bodyTransform = null;
+
+        if (string.IsNullOrEmpty(bodyName) || bodyObjects == null)
+        {
+            return false;
+        }
+
+        if (
+            bodyObjects.TryGetValue(bodyName, out GameObject bodyObject) &&
+            bodyObject != null
+        )
+        {
+            bodyTransform = bodyObject.transform;
+            return true;
+        }
+
+        return false;
+    }
+
     bool TryGetLodTerrainObject(out GameObject lodObject)
     {
         lodObject = null;
@@ -5956,6 +5977,7 @@ public class SimulationRunner : MonoBehaviour
         Debug.Log("SimulationRunner: flight LOD → " + nextName + " (SoI).");
         BodyView.RebindLodGlobes(bodyObjects);
         ApplyFlightUniverseVisualNow();
+        SyncPlanetLodRuntime();
 
         if (
             TryGetLodTerrainObject(out GameObject planetObject) &&

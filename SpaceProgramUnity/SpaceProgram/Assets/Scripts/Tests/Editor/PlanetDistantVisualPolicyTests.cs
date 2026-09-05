@@ -120,9 +120,53 @@ public sealed class PlanetDistantVisualPolicyTests
     }
 
     [Test]
+    public void GetDistantSecondaryScale_EarthFromMoon_DoesNotPullToNearSky()
+    {
+        const float earthCenter = 4_500_000f;
+        float clipOnly = PlanetDistantVisualPolicy.GetDistantSecondaryScale(
+            earthCenter,
+            EarthRadius,
+            pullToNearSky: false,
+            PlanetDistantVisualPolicy.DistantLimbHeightMeters
+        );
+        float pulled = PlanetDistantVisualPolicy.GetDistantSecondaryScale(
+            earthCenter,
+            EarthRadius,
+            pullToNearSky: true,
+            PlanetDistantVisualPolicy.DistantLimbHeightMeters
+        );
+
+        float farLimb = earthCenter + EarthRadius +
+            PlanetDistantVisualPolicy.DistantLimbHeightMeters;
+        float clipBudget = WorldVisualBridge.FlightCameraFarClip *
+            PlanetDistantVisualPolicy.DistantSecondaryFarClipFill;
+        float expectedClip = farLimb > clipBudget ? clipBudget / farLimb : 1f;
+
+        Assert.AreEqual(expectedClip, clipOnly, 1e-4f);
+        Assert.Greater(clipOnly, pulled);
+        Assert.Greater(
+            earthCenter * clipOnly,
+            PlanetDistantVisualPolicy.DistantSecondaryTargetCenterMeters * 10f
+        );
+    }
+
+    [Test]
     public void FlightDistantGlobeRenderQueue_IsBetweenAtmosphereAndClouds()
     {
         Assert.Greater(PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue, 3000);
-        Assert.Less(PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue, 3200);
+        Assert.Greater(
+            PlanetDistantVisualPolicy.FlightDistantAtmosphereRenderQueue,
+            PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue
+        );
+        Assert.Less(PlanetDistantVisualPolicy.FlightDistantAtmosphereRenderQueue, 3200);
+        Assert.Less(
+            PlanetDistantVisualPolicy.DistantLimbHeightMeters,
+            PlanetDistantVisualPolicy.AtmosphereShellHeightMeters
+        );
+        Assert.Less(PlanetDistantVisualPolicy.DistantLimbHeightMeters / EarthRadius, 0.03f);
+        Assert.Less(
+            PlanetDistantVisualPolicy.DistantLimbStrength,
+            0.001f
+        );
     }
 }

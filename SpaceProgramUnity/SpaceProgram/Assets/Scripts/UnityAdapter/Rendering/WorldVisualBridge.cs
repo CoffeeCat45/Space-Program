@@ -440,6 +440,37 @@ public static class WorldVisualBridge
     }
 
     /// <summary>
+    /// Takes inertial Mesh Frame directions into the flight universe (LOD planet
+    /// already uses InverseSpin so geography stays under the ship). Distant Earth/Moon
+    /// must use this, not <see cref="GetSimToFlightFrameRotation"/> on the inertial
+    /// radial — that frame ignores LOD spin and shows the wrong face vs map.
+    /// </summary>
+    public static Quaternion GetInertialMeshToFlightRotation(
+        Quaternion lodFlightRotation,
+        global::SimQuaternion lodBodySpin
+    )
+    {
+        Quaternion lodInertial = GetMapPlanetMeshFrameSpinRotation(lodBodySpin);
+        return lodFlightRotation * Quaternion.Inverse(lodInertial);
+    }
+
+    public static Vector3 InertialOffsetToFlight(
+        global::SimVector3 inertialOffset,
+        Quaternion inertialMeshToFlight
+    )
+    {
+        return inertialMeshToFlight * SimNormalToMeshFrameUnity(inertialOffset);
+    }
+
+    public static Quaternion GetDistantBodyFlightRotation(
+        Quaternion inertialMeshToFlight,
+        global::SimQuaternion distantBodySpin
+    )
+    {
+        return inertialMeshToFlight * GetMapPlanetMeshFrameSpinRotation(distantBodySpin);
+    }
+
+    /// <summary>
     /// Cove pad root on flattened terrain (local meters from planet center).
     /// </summary>
     public static Vector3 GetLaunchPadFixedLocalPositionOnPlanet()

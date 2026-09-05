@@ -7,6 +7,7 @@ Shader "SpaceProgram/MapModeEarthSurface"
         _ColorTint ("Color Tint", Color) = (1.1, 1.1, 1.1, 1.0)
         _ColorMapFlipLongitude ("Flip Color U", Float) = 0
         _ColorMapFlipLatitude ("Flip Color V", Float) = 0
+        [Enum(Off, 0, On, 1)] _ZWrite ("ZWrite", Float) = 1
     }
 
     SubShader
@@ -23,6 +24,8 @@ Shader "SpaceProgram/MapModeEarthSurface"
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
             Cull Back
+            ZWrite [_ZWrite]
+            ZTest LEqual
             Offset 1, 2
 
             HLSLPROGRAM
@@ -119,5 +122,5 @@ Shader "SpaceProgram/MapModeEarthSurface"
         }
     }
 
-    FallBack "Universal Render Pipeline/Lit"
+    FallBack Off
 }

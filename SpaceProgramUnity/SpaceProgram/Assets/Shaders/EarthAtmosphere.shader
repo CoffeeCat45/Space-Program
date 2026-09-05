@@ -155,8 +155,11 @@ Shader "SpaceProgram/EarthAtmosphere"
                 }
 
                 float3 rayDir = normalize(input.positionWS - _WorldSpaceCameraPos);
-                float scaleHeight = max(_ScaleHeight * (worldOuterRadius / max(_PlanetRadius + _AtmosphereHeight, 1.0)), 1.0);
-                float limbHeight = max(_LimbHeight * (worldOuterRadius / max(_PlanetRadius + _AtmosphereHeight, 1.0)), 1.0);
+                // Object units may be meters (LOD) or 0.5 (distant unit globe).
+                // Do not floor the denominator at 1 — that explodes H on the unit globe.
+                float objectOuterRadius = max(_PlanetRadius + _AtmosphereHeight, 1e-8);
+                float scaleHeight = max(_ScaleHeight * (worldOuterRadius / objectOuterRadius), 1e-8);
+                float limbHeight = max(_LimbHeight * (worldOuterRadius / objectOuterRadius), 1e-8);
                 float3 camUp = camRel / max(cameraRadius, 1.0);
 
                 Light mainLight = GetMainLight();

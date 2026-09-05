@@ -24,7 +24,8 @@
 | `SimulationConsole\` | ⚠️ **заморожен**, **не в git** — не использовать для тестов |
 | `Не используемые\` | Архив: `ReStock/`, `Pipeline/`, старый RSS/TIFF — игра не читает |
 | `файлы луны\` | Сырьё LROC/TIFF; в игре png + `moon_elevation.raw` |
-| `Build\` | Локальный Windows-плеер, не в git |
+| `Build\` | Локальный Windows-плеер с картами, не в git |
+| `ShareBuild\` | Копия плеера без GEBCO/PNG/RSS (после Build Windows Player), не в git |
 
 Unity-проект живёт **внутри** репозитория. GitHub — **код и доки без датасетов** (карты/высоты/DDS только на этом ПК). См. `GITHUB_HEAVY_FILES.md`.
 
@@ -34,8 +35,10 @@ Unity-проект живёт **внутри** репозитория. GitHub �
 
 - Editor: `SpaceProgramUnity\SpaceProgram\Ships\*.json`
 - Логика: `VabFileSystem.GameDirectory` = родитель `Assets/` (`Application.dataPath/../`); плеер также читает `StreamingAssets/Ships`
-- Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources
+- Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources. После Windows Build — `ShareBuildExporter` кладёт лёгкую копию в `ShareBuild/` (без карт).
 - RSS DDS (`Assets/Content/Environment/…`) в Editor читаются с диска; в плеер копируются в `StreamingAssets/Content/` при Build. **Не в git.**
+
+**Настройки (графика / HUD / разработчик):** `settings.json` в `VabFileSystem.GameDirectory` (рядом с `Assets/` в Editor, рядом с `.exe` в плеере). Первый запуск копирует старые PlayerPrefs в файл. F5 и `Ships/` — отдельные файлы.
 
 ---
 

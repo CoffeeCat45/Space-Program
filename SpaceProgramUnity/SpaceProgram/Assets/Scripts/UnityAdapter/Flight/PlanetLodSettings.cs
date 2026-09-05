@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// Persistent planet terrain graphics tuning (PlayerPrefs). Applied to <see cref="FlightPlanetSphere"/>.
+/// Persistent planet terrain graphics tuning (<c>settings.json</c>). Applied to <see cref="FlightPlanetSphere"/>.
 /// </summary>
 public static class PlanetLodSettings
 {
@@ -39,22 +39,7 @@ public static class PlanetLodSettings
         }
     }
 
-    const string LodDistanceKey = "SpaceProgram.PlanetTerrain.LodDistanceFactor";
-    const string LoadSpeedKey = "SpaceProgram.PlanetTerrain.LoadSpeedPerFrame";
-    const string MaxLodKey = "SpaceProgram.PlanetTerrain.MaxLod";
-    const string MaxLodFloorMigratedKey = "SpaceProgram.PlanetTerrain.MaxLodFloorV2";
-    const string ViewConeKey = "SpaceProgram.PlanetTerrain.ViewConeHalfAngle";
-    const string CloudDetailKey = "SpaceProgram.PlanetTerrain.CloudDetail";
-    const string CloudCoverageKey = "SpaceProgram.PlanetTerrain.CloudCoverage";
-    const string CloudFrequencyKey = "SpaceProgram.PlanetTerrain.CloudFrequency";
-    const string CloudClusterKey = "SpaceProgram.PlanetTerrain.CloudCluster";
-    const string CloudRendererKey = "SpaceProgram.PlanetTerrain.CloudRenderer";
-    const string ExpCloudCoverageKey = "SpaceProgram.PlanetTerrain.ExpCloudCoverage";
-    const string ExpCloudFlowKey = "SpaceProgram.PlanetTerrain.ExpCloudFlow";
-    const string ExpCloudVortexKey = "SpaceProgram.PlanetTerrain.ExpCloudVortex";
-    const string ExpCloudGrainKey = "SpaceProgram.PlanetTerrain.ExpCloudGrain";
-    const string ExpCloudMassScaleKey = "SpaceProgram.PlanetTerrain.ExpCloudMassScale";
-    const string ExpCloudSoftnessKey = "SpaceProgram.PlanetTerrain.ExpCloudSoftness";
+    public static event Action Changed;
 
     public static float LodDistanceFactor { get; private set; } =
         FlightPlanetTerrainTuning.LodDistanceFactorDefault;
@@ -116,123 +101,78 @@ public static class PlanetLodSettings
     public static float ExpCloudSoftness { get; private set; } =
         FlightPlanetTerrainTuning.ExpCloudSoftnessDefault;
 
-    public static event Action Changed;
-
     public static void Load()
     {
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsGraphics graphics = GameSettingsStore.Data.graphics;
         LodDistanceFactor = Mathf.Clamp(
-            PlayerPrefs.GetFloat(LodDistanceKey, FlightPlanetTerrainTuning.LodDistanceFactorDefault),
+            graphics.lodDistanceFactor,
             FlightPlanetTerrainTuning.LodDistanceFactorMin,
             FlightPlanetTerrainTuning.LodDistanceFactorMax
         );
         LoadSpeedPerFrame = Mathf.Clamp(
-            PlayerPrefs.GetInt(LoadSpeedKey, FlightPlanetSphere.DefaultMaxLodSplitsPerFrame),
+            graphics.loadSpeedPerFrame,
             FlightPlanetTerrainTuning.LoadSpeedMin,
             FlightPlanetTerrainTuning.LoadSpeedMax
         );
         MaxLod = Mathf.Clamp(
-            PlayerPrefs.GetInt(MaxLodKey, FlightPlanetSphere.DefaultMaxLodLevel),
+            graphics.maxLod,
             FlightPlanetTerrainTuning.MaxLodMin,
             FlightPlanetSphere.DefaultMaxLodLevel
         );
-        // V2 forced MaxLod 15 for exe users stuck at 7. L15 on the pad floods
-        // split/mesh work (FPS) and pops GEBCO heights under the ship (Y hitch).
-        if (PlayerPrefs.GetInt(MaxLodFloorMigratedKey, 0) == 1)
-        {
-            if (MaxLod == FlightPlanetSphere.DefaultMaxLodLevel)
-            {
-                MaxLod = 8;
-                PlayerPrefs.SetInt(MaxLodKey, MaxLod);
-            }
-
-            PlayerPrefs.SetInt(MaxLodFloorMigratedKey, 2);
-            PlayerPrefs.Save();
-        }
         ViewConeHalfAngleDegrees = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ViewConeKey,
-                PlanetPqsAsyncLodSettings.DefaultViewConeHalfAngleDegrees
-            ),
+            graphics.viewConeHalfAngleDegrees,
             FlightPlanetTerrainTuning.ViewConeHalfAngleMin,
             FlightPlanetTerrainTuning.ViewConeHalfAngleMax
         );
         CloudDetail = Mathf.Clamp(
-            PlayerPrefs.GetFloat(CloudDetailKey, FlightPlanetTerrainTuning.CloudDetailDefault),
+            graphics.cloudDetail,
             FlightPlanetTerrainTuning.CloudDetailMin,
             FlightPlanetTerrainTuning.CloudDetailMax
         );
         CloudCoverage = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                CloudCoverageKey,
-                FlightPlanetTerrainTuning.CloudCoverageDefault
-            ),
+            graphics.cloudCoverage,
             FlightPlanetTerrainTuning.CloudCoverageMin,
             FlightPlanetTerrainTuning.CloudCoverageMax
         );
         CloudFrequency = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                CloudFrequencyKey,
-                FlightPlanetTerrainTuning.CloudFrequencyDefault
-            ),
+            graphics.cloudFrequency,
             FlightPlanetTerrainTuning.CloudFrequencyMin,
             FlightPlanetTerrainTuning.CloudFrequencyMax
         );
         CloudCluster = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                CloudClusterKey,
-                FlightPlanetTerrainTuning.CloudClusterDefault
-            ),
+            graphics.cloudCluster,
             FlightPlanetTerrainTuning.CloudClusterMin,
             FlightPlanetTerrainTuning.CloudClusterMax
         );
-        CloudRenderer = ClampCloudRenderer(
-            PlayerPrefs.GetInt(CloudRendererKey, (int)CloudRendererMode.SimpleShells)
-        );
+        CloudRenderer = GameSettingsStore.ReadCloudRenderer();
         ExpCloudCoverage = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudCoverageKey,
-                FlightPlanetTerrainTuning.ExpCloudCoverageDefault
-            ),
+            graphics.expCloudCoverage,
             FlightPlanetTerrainTuning.ExpCloudCoverageMin,
             FlightPlanetTerrainTuning.ExpCloudCoverageMax
         );
         ExpCloudFlow = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudFlowKey,
-                FlightPlanetTerrainTuning.ExpCloudFlowDefault
-            ),
+            graphics.expCloudFlow,
             FlightPlanetTerrainTuning.ExpCloudFlowMin,
             FlightPlanetTerrainTuning.ExpCloudFlowMax
         );
         ExpCloudVortex = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudVortexKey,
-                FlightPlanetTerrainTuning.ExpCloudVortexDefault
-            ),
+            graphics.expCloudVortex,
             FlightPlanetTerrainTuning.ExpCloudVortexMin,
             FlightPlanetTerrainTuning.ExpCloudVortexMax
         );
         ExpCloudGrain = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudGrainKey,
-                FlightPlanetTerrainTuning.ExpCloudGrainDefault
-            ),
+            graphics.expCloudGrain,
             FlightPlanetTerrainTuning.ExpCloudGrainMin,
             FlightPlanetTerrainTuning.ExpCloudGrainMax
         );
         ExpCloudMassScale = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudMassScaleKey,
-                FlightPlanetTerrainTuning.ExpCloudMassScaleDefault
-            ),
+            graphics.expCloudMassScale,
             FlightPlanetTerrainTuning.ExpCloudMassScaleMin,
             FlightPlanetTerrainTuning.ExpCloudMassScaleMax
         );
         ExpCloudSoftness = Mathf.Clamp(
-            PlayerPrefs.GetFloat(
-                ExpCloudSoftnessKey,
-                FlightPlanetTerrainTuning.ExpCloudSoftnessDefault
-            ),
+            graphics.expCloudSoftness,
             FlightPlanetTerrainTuning.ExpCloudSoftnessMin,
             FlightPlanetTerrainTuning.ExpCloudSoftnessMax
         );
@@ -329,6 +269,7 @@ public static class PlanetLodSettings
     public static void SetCloudRenderer(CloudRendererMode mode)
     {
         CloudRenderer = ClampCloudRenderer((int)mode);
+        GameSettingsStore.WriteCloudRenderer(CloudRenderer);
         Save();
         NotifyChanged();
     }
@@ -421,22 +362,24 @@ public static class PlanetLodSettings
 
     public static void Save()
     {
-        PlayerPrefs.SetFloat(LodDistanceKey, LodDistanceFactor);
-        PlayerPrefs.SetInt(LoadSpeedKey, LoadSpeedPerFrame);
-        PlayerPrefs.SetInt(MaxLodKey, MaxLod);
-        PlayerPrefs.SetFloat(ViewConeKey, ViewConeHalfAngleDegrees);
-        PlayerPrefs.SetFloat(CloudDetailKey, CloudDetail);
-        PlayerPrefs.SetFloat(CloudCoverageKey, CloudCoverage);
-        PlayerPrefs.SetFloat(CloudFrequencyKey, CloudFrequency);
-        PlayerPrefs.SetFloat(CloudClusterKey, CloudCluster);
-        PlayerPrefs.SetInt(CloudRendererKey, (int)CloudRenderer);
-        PlayerPrefs.SetFloat(ExpCloudCoverageKey, ExpCloudCoverage);
-        PlayerPrefs.SetFloat(ExpCloudFlowKey, ExpCloudFlow);
-        PlayerPrefs.SetFloat(ExpCloudVortexKey, ExpCloudVortex);
-        PlayerPrefs.SetFloat(ExpCloudGrainKey, ExpCloudGrain);
-        PlayerPrefs.SetFloat(ExpCloudMassScaleKey, ExpCloudMassScale);
-        PlayerPrefs.SetFloat(ExpCloudSoftnessKey, ExpCloudSoftness);
-        PlayerPrefs.Save();
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsGraphics graphics = GameSettingsStore.Data.graphics;
+        graphics.lodDistanceFactor = LodDistanceFactor;
+        graphics.loadSpeedPerFrame = LoadSpeedPerFrame;
+        graphics.maxLod = MaxLod;
+        graphics.viewConeHalfAngleDegrees = ViewConeHalfAngleDegrees;
+        graphics.cloudDetail = CloudDetail;
+        graphics.cloudCoverage = CloudCoverage;
+        graphics.cloudFrequency = CloudFrequency;
+        graphics.cloudCluster = CloudCluster;
+        GameSettingsStore.WriteCloudRenderer(CloudRenderer);
+        graphics.expCloudCoverage = ExpCloudCoverage;
+        graphics.expCloudFlow = ExpCloudFlow;
+        graphics.expCloudVortex = ExpCloudVortex;
+        graphics.expCloudGrain = ExpCloudGrain;
+        graphics.expCloudMassScale = ExpCloudMassScale;
+        graphics.expCloudSoftness = ExpCloudSoftness;
+        GameSettingsStore.SaveToDisk();
     }
 
     public static ResolvedRuntime ResolveBaselineRuntime()

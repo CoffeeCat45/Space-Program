@@ -114,3 +114,11 @@ SimulationServer/publish/
 # Untitled local canvas
 /Без названия.canvas
 
+# Local graphics/HUD/dev options (not world saves)
+/SpaceProgramUnity/SpaceProgram/settings.json
+
+# Full local player (with maps). Share copy without maps is ShareBuild/
+/Build.zip
+/ShareBuild/
+/ShareBuild.zip
+

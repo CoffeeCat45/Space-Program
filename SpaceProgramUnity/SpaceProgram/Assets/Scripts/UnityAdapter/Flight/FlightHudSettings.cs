@@ -64,7 +64,7 @@ public enum FlightHudBackground
 }
 
 /// <summary>
-/// Which flight HUD lines are shown. Persisted in PlayerPrefs. Default: all on.
+/// Which flight HUD lines are shown. Persisted in <c>settings.json</c>. Default: all on.
 /// </summary>
 public static class FlightHudSettings
 {
@@ -81,9 +81,6 @@ public static class FlightHudSettings
             NameKey = nameKey;
         }
     }
-
-    const string PrefsPrefix = "SpaceProgram.Hud.Show.";
-    const string BackgroundKey = "SpaceProgram.Hud.Background";
 
     static readonly Color BackgroundTransparent = new Color(0f, 0f, 0f, 0f);
     static readonly Color BackgroundDim = new Color(0f, 0f, 0f, 0.38f);
@@ -155,12 +152,15 @@ public static class FlightHudSettings
 
     public static void Load()
     {
-        for (int i = 0; i < AllFields.Length; i++)
+        GameSettingsStore.EnsureLoaded();
+        bool[] stored = GameSettingsStore.ReadHudVisibility();
+
+        for (int i = 0; i < AllFields.Length && i < stored.Length; i++)
         {
-            Visible[i] = PlayerPrefs.GetInt(PrefsKey(AllFields[i]), 1) == 1;
+            Visible[i] = stored[i];
         }
 
-        Background = ClampBackground(PlayerPrefs.GetInt(BackgroundKey, 0));
+        Background = GameSettingsStore.ReadHudBackground();
         loaded = true;
     }
 
@@ -217,8 +217,7 @@ public static class FlightHudSettings
         }
 
         Visible[index] = visible;
-        PlayerPrefs.SetInt(PrefsKey(field), visible ? 1 : 0);
-        PlayerPrefs.Save();
+        PersistHud();
     }
 
     public static void SetAllVisible(bool visible)
@@ -231,10 +230,9 @@ public static class FlightHudSettings
         for (int i = 0; i < AllFields.Length; i++)
         {
             Visible[i] = visible;
-            PlayerPrefs.SetInt(PrefsKey(AllFields[i]), visible ? 1 : 0);
         }
 
-        PlayerPrefs.Save();
+        PersistHud();
     }
 
     public static void SetBackground(FlightHudBackground background)
@@ -245,8 +243,8 @@ public static class FlightHudSettings
         }
 
         Background = ClampBackground((int)background);
-        PlayerPrefs.SetInt(BackgroundKey, (int)Background);
-        PlayerPrefs.Save();
+        GameSettingsStore.WriteHudBackground(Background);
+        GameSettingsStore.SaveToDisk();
     }
 
     public static Color GetBackgroundColor()
@@ -282,8 +280,10 @@ public static class FlightHudSettings
         return FlightHudBackground.Transparent;
     }
 
-    static string PrefsKey(FlightHudField field)
+    static void PersistHud()
     {
-        return PrefsPrefix + field;
+        GameSettingsStore.WriteHudVisibility(Visible);
+        GameSettingsStore.WriteHudBackground(Background);
+        GameSettingsStore.SaveToDisk();
     }
 }

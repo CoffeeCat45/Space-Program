@@ -28,11 +28,7 @@ public class FlightSkyVisibilityController : MonoBehaviour
 
             if (planetTransform != null)
             {
-                FlightPlanetAtmosphereSphere atmosphereSphere = planetTransform
-                    .Find("PlanetAtmosphere")
-                    ?.GetComponent<FlightPlanetAtmosphereSphere>();
-
-                atmosphereSphere?.ApplyMapModePresentation(true);
+                FindAtmosphere(planetTransform)?.ApplyMapModePresentation(true);
             }
 
             return;
@@ -48,27 +44,61 @@ public class FlightSkyVisibilityController : MonoBehaviour
         if (CelestialTerrainRuntime.IsMoon)
         {
             GalaxySkyboxEnvironment.ApplyMapModeVisibility();
-            return;
-        }
-
-        if (simulation.planet == null)
-        {
+            SyncDistantEarthShells();
             return;
         }
 
         double altitudeMeters = simulation.GetShipAltitudeAbovePlanet();
         GalaxySkyboxEnvironment.ApplyAltitudeVisibility(altitudeMeters);
 
-        if (planetTransform != null)
-        {
-            FlightPlanetAtmosphereSphere atmosphereSphere = planetTransform
-                .Find("PlanetAtmosphere")
-                ?.GetComponent<FlightPlanetAtmosphereSphere>();
+        FlightPlanetAtmosphereSphere atmosphere = FindAtmosphere(planetTransform);
 
-            if (atmosphereSphere != null)
-            {
-                atmosphereSphere.ApplyCameraAltitude(altitudeMeters);
-            }
+        if (atmosphere == null)
+        {
+            return;
+        }
+
+        atmosphere.ApplyCameraAltitude(altitudeMeters);
+
+        Camera camera = Camera.main;
+
+        if (camera != null)
+        {
+            atmosphere.UpdateCameraFacing(camera.transform.position);
+        }
+    }
+
+    static FlightPlanetAtmosphereSphere FindAtmosphere(Transform planetTransform)
+    {
+        if (planetTransform == null)
+        {
+            return null;
+        }
+
+        return planetTransform.Find("PlanetAtmosphere")
+            ?.GetComponent<FlightPlanetAtmosphereSphere>();
+    }
+
+    void SyncDistantEarthShells()
+    {
+        if (runner == null || !runner.TryGetBodyVisualTransform("Planet", out Transform earth))
+        {
+            return;
+        }
+
+        DistantCelestialGlobe globe = earth.GetComponent<DistantCelestialGlobe>();
+
+        if (globe == null)
+        {
+            return;
+        }
+
+        globe.ApplyCompositing(false);
+        Camera camera = Camera.main;
+
+        if (camera != null)
+        {
+            globe.SyncTransparentShells(camera.transform.position);
         }
     }
 }

@@ -115,4 +115,38 @@ public sealed class WorldVisualBridgeFlightFrameTests
         Assert.AreEqual(new Vector3(0f, 3_860_000f, 0f), local);
         Assert.AreEqual(moonInShipFrame, universeSlide + local);
     }
+
+    [Test]
+    public void InertialOffsetToFlight_KeepsNadirUpWhenLodSpinIsOn()
+    {
+        global::SimVector3 cape = CapeSim();
+        global::SimQuaternion lodSpin = global::SimQuaternion.FromAxisAngle(
+            global::SimVector3.UnitY(),
+            Math.PI / 3.0
+        );
+        global::SimVector3 inertialRadial = lodSpin.Rotate(cape);
+        Quaternion lodFlight = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(cape);
+        Quaternion inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            lodFlight,
+            lodSpin
+        );
+        Vector3 flight = WorldVisualBridge.InertialOffsetToFlight(
+            inertialRadial,
+            inertialToFlight
+        );
+
+        Assert.Greater(
+            Vector3.Dot(flight.normalized, Vector3.up),
+            0.99f,
+            "Ship-radial inertial offset must stay zenith after InverseSpin."
+        );
+
+        Vector3 capeUnity = WorldVisualBridge.SimNormalToUnity(inertialRadial);
+        Quaternion oldEnu = WorldVisualBridge.GetSimToFlightFrameRotation(capeUnity);
+        Assert.Greater(
+            Quaternion.Angle(inertialToFlight, oldEnu),
+            5f,
+            "Distant-body frame must not ignore LOD spin (that desyncs map vs flight faces)."
+        );
+    }
 }

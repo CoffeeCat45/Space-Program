@@ -2105,32 +2105,29 @@ static class BodyView
         ResetCelestialParentScale(bodyObject);
 
         global::SimVector3 relative = bodyCenterWorld.Subtract(shipCenterWorld);
-        Vector3 shipRadialUnity = ResolveUnitySurfaceNormal(
-            simulation != null && simulation.GetVisualTerrainBody() != null ?
-                simulation.GetVisualTerrainBody().position :
-                bodyCenterWorld,
-            shipCenterWorld
+        global::SimQuaternion lodSpin = ResolveLodBodySpin(simulation);
+        Quaternion lodFlight = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(
+            WorldVisualBridge.ResolveBodyFixedDirectionUnderShip(simulation, lodSpin)
         );
-
-        if (shipRadialUnity.sqrMagnitude <= 1e-8f)
-        {
-            shipRadialUnity = WorldVisualBridge.GetLaunchSiteNormalUnity();
-        }
-
-        Vector3 flightPosition = WorldVisualBridge.SimVelocityToUnityFlight(
+        Quaternion inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            lodFlight,
+            lodSpin
+        );
+        Vector3 flightPosition = WorldVisualBridge.InertialOffsetToFlight(
             relative,
-            shipRadialUnity
+            inertialToFlight
         );
 
         float visualRadius = GetDistantGlobeRenderedRadius(bodyObject, bodyState.radius);
         float centerDistance = flightPosition.magnitude;
-        bool pullToNearSky =
-            bodyState.name == CelestialTerrainRuntime.EarthBodyName &&
-            CelestialTerrainRuntime.IsMoon;
+        float atmospherePadding = bodyState.name == CelestialTerrainRuntime.EarthBodyName ?
+            PlanetDistantVisualPolicy.DistantLimbHeightMeters :
+            0f;
         float distantScale = PlanetDistantVisualPolicy.GetDistantSecondaryScale(
             centerDistance,
             visualRadius,
-            pullToNearSky
+            pullToNearSky: false,
+            atmospherePadding
         );
 
         if (distantScale < 1f)
@@ -2166,9 +2163,10 @@ static class BodyView
             }
         }
 
-        Quaternion inertialMesh = WorldVisualBridge.GetMapPlanetMeshFrameSpinRotation(bodySpin);
-        Quaternion simToFlight = WorldVisualBridge.GetSimToFlightFrameRotation(shipRadialUnity);
-        Quaternion flightSpin = simToFlight * inertialMesh;
+        Quaternion flightSpin = WorldVisualBridge.GetDistantBodyFlightRotation(
+            inertialToFlight,
+            bodySpin
+        );
         bodyObject.transform.localRotation = QuaternionIsFinite(flightSpin) ?
             flightSpin :
             Quaternion.identity;

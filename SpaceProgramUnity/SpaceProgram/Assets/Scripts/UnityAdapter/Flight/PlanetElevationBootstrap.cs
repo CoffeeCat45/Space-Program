@@ -7,8 +7,6 @@ using UnityEngine;
 /// </summary>
 static class PlanetElevationBootstrap
 {
-    const string UseHighResPlayerPrefsKey = "SpaceProgram.PlanetElevation.UseHighResRaw";
-
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void AutoLoad()
     {
@@ -129,8 +127,7 @@ static class PlanetElevationBootstrap
         string binPath = PlanetDataPaths.ElevationBinaryPath;
         bool rawExists = File.Exists(rawPath);
         bool binExists = File.Exists(binPath);
-        int defaultHighRes = rawExists ? 1 : 0;
-        bool useHighRes = PlayerPrefs.GetInt(UseHighResPlayerPrefsKey, defaultHighRes) == 1;
+        bool useHighRes = GameSettingsStore.Data.graphics.useHighResElevation;
 #if !UNITY_EDITOR
         if (rawExists)
         {

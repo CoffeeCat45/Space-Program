@@ -18,7 +18,6 @@ public enum PlayMissionPhase
 
 class SimulationPlaySession
 {
-    const string LastScenarioKey = "SpaceProgram.LastScenario";
     const string DefaultPadVesselName = "test";
     const string DefaultLaunchShipFileName = "default_launch_v2.ship";
     const string LegacyLaunchShipFileName = "default_launch.ship";
@@ -38,15 +37,11 @@ class SimulationPlaySession
     public SimulationScenario GetStartupScenario(SimulationScenario inspectorDefault)
     {
         SimulationScenario startup = inspectorDefault;
+        GameSettingsStore.EnsureLoaded();
 
-        if (PlayerPrefs.HasKey(LastScenarioKey))
+        if (Enum.IsDefined(typeof(SimulationScenario), GameSettingsStore.Data.play.lastScenario))
         {
-            int savedValue = PlayerPrefs.GetInt(LastScenarioKey, (int)inspectorDefault);
-
-            if (Enum.IsDefined(typeof(SimulationScenario), savedValue))
-            {
-                startup = (SimulationScenario)savedValue;
-            }
+            startup = (SimulationScenario)GameSettingsStore.Data.play.lastScenario;
         }
 
         return NormalizePlayableScenario(startup, inspectorDefault);
@@ -92,8 +87,9 @@ class SimulationPlaySession
 
     public void SaveLastScenario(SimulationScenario scenario)
     {
-        PlayerPrefs.SetInt(LastScenarioKey, (int)scenario);
-        PlayerPrefs.Save();
+        GameSettingsStore.EnsureLoaded();
+        GameSettingsStore.Data.play.lastScenario = (int)scenario;
+        GameSettingsStore.SaveToDisk();
     }
 
     public void ResetMissionTracking()

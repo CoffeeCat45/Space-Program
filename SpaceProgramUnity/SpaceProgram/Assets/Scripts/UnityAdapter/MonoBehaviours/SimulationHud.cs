@@ -1400,6 +1400,7 @@ public class SimulationHud : MonoBehaviour
         if (GUILayout.Button("RU", GUILayout.Width(34)))
         {
             Localization.currentLanguage = Localization.Language.Russian;
+            GameSettingsStore.SetLanguage(Localization.Language.Russian);
         }
 
         GUI.backgroundColor =
@@ -1410,6 +1411,7 @@ public class SimulationHud : MonoBehaviour
         if (GUILayout.Button("EN", GUILayout.Width(34)))
         {
             Localization.currentLanguage = Localization.Language.English;
+            GameSettingsStore.SetLanguage(Localization.Language.English);
         }
 
         GUI.backgroundColor = previousColor;
