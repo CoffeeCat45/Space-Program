@@ -20,6 +20,7 @@ static class FlightCameraBootstrap
         PromoteToMainCamera(primary);
         ConsolidateDuplicateCameras(primary, sessionRoot);
         PreparePrimaryForFlight(primary);
+        VabGraphicsManager.ApplySavedCameraQuality();
         return primary;
     }
 
@@ -40,6 +41,7 @@ static class FlightCameraBootstrap
         PromoteToMainCamera(primary);
         ConsolidateDuplicateCameras(primary, sessionRoot);
         PreparePrimaryForMenu(primary);
+        VabGraphicsManager.ApplySavedCameraQuality();
         return primary;
     }
 
@@ -84,6 +86,7 @@ static class FlightCameraBootstrap
                 flightController.enabled = false;
             }
 
+            VabGraphicsManager.ApplySavedCameraQuality();
             return;
         }
     }

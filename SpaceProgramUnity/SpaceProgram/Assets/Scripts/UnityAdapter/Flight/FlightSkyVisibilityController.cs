@@ -25,6 +25,7 @@ public class FlightSkyVisibilityController : MonoBehaviour
         if (runner.IsMapModeActive)
         {
             GalaxySkyboxEnvironment.ApplyMapModeVisibility();
+            SyncEarthCloudCompositing(mapMode: true);
 
             if (planetTransform != null)
             {
@@ -44,7 +45,7 @@ public class FlightSkyVisibilityController : MonoBehaviour
         if (CelestialTerrainRuntime.IsMoon)
         {
             GalaxySkyboxEnvironment.ApplyMapModeVisibility();
-            SyncDistantEarthShells();
+            SyncEarthCloudCompositing(mapMode: false);
             return;
         }
 
@@ -79,7 +80,7 @@ public class FlightSkyVisibilityController : MonoBehaviour
             ?.GetComponent<FlightPlanetAtmosphereSphere>();
     }
 
-    void SyncDistantEarthShells()
+    void SyncEarthCloudCompositing(bool mapMode)
     {
         if (runner == null || !runner.TryGetBodyVisualTransform("Planet", out Transform earth))
         {
@@ -88,17 +89,24 @@ public class FlightSkyVisibilityController : MonoBehaviour
 
         DistantCelestialGlobe globe = earth.GetComponent<DistantCelestialGlobe>();
 
-        if (globe == null)
+        if (globe != null)
         {
+            globe.ApplyCompositing(mapMode);
+            Camera camera = Camera.main;
+
+            if (camera != null)
+            {
+                globe.SyncTransparentShells(camera.transform.position);
+            }
+
             return;
         }
 
-        globe.ApplyCompositing(false);
-        Camera camera = Camera.main;
+        FlightPlanetSphere lod = earth.GetComponent<FlightPlanetSphere>();
 
-        if (camera != null)
+        if (lod != null && lod.enabled)
         {
-            globe.SyncTransparentShells(camera.transform.position);
+            FlightPlanetSphere.ApplyRuntimeAtmosphereCloudVisuals();
         }
     }
 }

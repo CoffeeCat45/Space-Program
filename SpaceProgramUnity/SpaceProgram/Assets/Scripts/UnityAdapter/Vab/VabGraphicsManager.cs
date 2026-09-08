@@ -21,6 +21,15 @@ public static class VabGraphicsManager
     public const int PostAaQualityMedium = 1;
     public const int PostAaQualityHigh = 2;
 
+    public const int DisplayModeWindowed = 0;
+    public const int DisplayModeExclusive = 1;
+    public const int DisplayModeBorderless = 2;
+
+    public const int WindowedPlayerWidth = 1600;
+    public const int WindowedPlayerHeight = 900;
+
+    const string OrbitOverlayCameraObjectName = "Orbit Overlay Camera";
+
     /// <summary>
     /// Changes MSAA on the active URP asset.
     /// Accepts 0 (Disabled), 2, 4, or 8.
@@ -45,11 +54,11 @@ public static class VabGraphicsManager
     }
 
     /// <summary>
-    /// Configures post anti-aliasing on all active cameras.
+    /// Configures post anti-aliasing on game cameras. Overlay stack cameras stay without post.
     /// </summary>
     public static void SetPostAntiAliasing(int modeIndex, int qualityIndex)
     {
-        Camera[] cameras = FindTargetCameras();
+        Camera[] cameras = FindSceneCameras();
         if (cameras.Length == 0)
         {
             Debug.LogWarning("VabGraphicsManager: No cameras found for post anti-aliasing.");
@@ -93,6 +102,13 @@ public static class VabGraphicsManager
             return;
         }
 
+        if (!IsPostAntiAliasingTarget(camera))
+        {
+            cameraData.antialiasing = AntialiasingMode.None;
+            cameraData.renderPostProcessing = false;
+            return;
+        }
+
         camera.allowMSAA = true;
         cameraData.antialiasing = mode;
         cameraData.renderPostProcessing = mode != AntialiasingMode.None;
@@ -105,7 +121,23 @@ public static class VabGraphicsManager
         cameraData.antialiasingQuality = quality;
     }
 
-    static Camera[] FindTargetCameras()
+    public static bool IsPostAntiAliasingTarget(Camera camera)
+    {
+        if (camera == null || !camera.gameObject.scene.IsValid())
+        {
+            return false;
+        }
+
+        if (camera.name == OrbitOverlayCameraObjectName)
+        {
+            return false;
+        }
+
+        UniversalAdditionalCameraData cameraData = camera.GetUniversalAdditionalCameraData();
+        return cameraData == null || cameraData.renderType != CameraRenderType.Overlay;
+    }
+
+    static Camera[] FindSceneCameras()
     {
         Camera[] cameras = Object.FindObjectsByType<Camera>(
             FindObjectsInactive.Include,
@@ -146,21 +178,29 @@ public static class VabGraphicsManager
 
     static Camera GetPrimaryCamera()
     {
-        Camera[] cameras = FindTargetCameras();
-        if (cameras.Length == 0)
-        {
-            return null;
-        }
+        Camera[] cameras = FindSceneCameras();
+        Camera fallback = null;
 
         for (int i = 0; i < cameras.Length; i++)
         {
-            if (cameras[i] != null && cameras[i].CompareTag("MainCamera"))
+            Camera camera = cameras[i];
+            if (!IsPostAntiAliasingTarget(camera))
             {
-                return cameras[i];
+                continue;
+            }
+
+            if (camera.CompareTag("MainCamera"))
+            {
+                return camera;
+            }
+
+            if (fallback == null)
+            {
+                fallback = camera;
             }
         }
 
-        return cameras[0];
+        return fallback;
     }
 
     public static int GetMsaaLevel()
@@ -223,6 +263,70 @@ public static class VabGraphicsManager
         };
     }
 
+    public static int ClampDisplayMode(int displayMode)
+    {
+        if (displayMode == DisplayModeExclusive || displayMode == DisplayModeBorderless)
+        {
+            return displayMode;
+        }
+
+        return DisplayModeWindowed;
+    }
+
+    public static FullScreenMode ToUnityFullScreenMode(int displayMode)
+    {
+        return ClampDisplayMode(displayMode) switch
+        {
+            DisplayModeExclusive => FullScreenMode.ExclusiveFullScreen,
+            DisplayModeBorderless => FullScreenMode.FullScreenWindow,
+            _ => FullScreenMode.Windowed,
+        };
+    }
+
+    public static int FromUnityFullScreenMode(FullScreenMode mode)
+    {
+        return mode switch
+        {
+            FullScreenMode.ExclusiveFullScreen => DisplayModeExclusive,
+            FullScreenMode.FullScreenWindow => DisplayModeBorderless,
+            FullScreenMode.MaximizedWindow => DisplayModeBorderless,
+            _ => DisplayModeWindowed,
+        };
+    }
+
+    public static void ApplyDisplayMode(int displayMode)
+    {
+#if UNITY_EDITOR
+        ClampDisplayMode(displayMode);
+#else
+        FullScreenMode mode = ToUnityFullScreenMode(displayMode);
+        if (mode == FullScreenMode.Windowed)
+        {
+            if (Screen.fullScreenMode != FullScreenMode.Windowed)
+            {
+                Screen.SetResolution(WindowedPlayerWidth, WindowedPlayerHeight, FullScreenMode.Windowed);
+            }
+
+            return;
+        }
+
+        Resolution native = Screen.currentResolution;
+        int width = native.width > 0 ? native.width : WindowedPlayerWidth;
+        int height = native.height > 0 ? native.height : WindowedPlayerHeight;
+        Screen.SetResolution(width, height, mode);
+#endif
+    }
+
+    public static int GetDisplayMode()
+    {
+        if (TryLoadSnapshot(out GraphicsSettingsSnapshot snapshot))
+        {
+            return ClampDisplayMode(snapshot.displayMode);
+        }
+
+        return ClampDisplayMode(GameSettingsStore.Data.graphics.displayMode);
+    }
+
     public struct GraphicsSettingsSnapshot
     {
         public bool msaaEnabled;
@@ -230,10 +334,55 @@ public static class VabGraphicsManager
         public bool postAaEnabled;
         public int postAaMode;
         public int postAaQuality;
+        public int displayMode;
+        public int targetFrameRate;
+    }
+
+    public static int ClampTargetFrameRate(int framesPerSecond)
+    {
+        if (framesPerSecond <= 0 || framesPerSecond > 400)
+        {
+            return 0;
+        }
+
+        return framesPerSecond;
+    }
+
+    public static void ApplyTargetFrameRate(int framesPerSecond)
+    {
+        int clamped = ClampTargetFrameRate(framesPerSecond);
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = clamped <= 0 ? -1 : clamped;
+    }
+
+    public static int GetTargetFrameRate()
+    {
+        if (TryLoadSnapshot(out GraphicsSettingsSnapshot snapshot))
+        {
+            return ClampTargetFrameRate(snapshot.targetFrameRate);
+        }
+
+        return ClampTargetFrameRate(GameSettingsStore.Data.graphics.targetFrameRate);
     }
 
     public static void ApplySnapshot(GraphicsSettingsSnapshot snapshot)
     {
+        SetMsaaLevel(snapshot.msaaEnabled ? snapshot.msaaLevel : MsaaDisabled);
+        SetPostAntiAliasing(
+            snapshot.postAaEnabled ? snapshot.postAaMode : PostAaModeNone,
+            snapshot.postAaQuality
+        );
+        ApplyDisplayMode(snapshot.displayMode);
+        ApplyTargetFrameRate(snapshot.targetFrameRate);
+    }
+
+    public static void ApplySavedCameraQuality()
+    {
+        if (!TryLoadSnapshot(out GraphicsSettingsSnapshot snapshot))
+        {
+            return;
+        }
+
         SetMsaaLevel(snapshot.msaaEnabled ? snapshot.msaaLevel : MsaaDisabled);
         SetPostAntiAliasing(
             snapshot.postAaEnabled ? snapshot.postAaMode : PostAaModeNone,
@@ -253,11 +402,15 @@ public static class VabGraphicsManager
             postAaEnabled = postMode != PostAaModeNone,
             postAaMode = postMode == PostAaModeNone ? PostAaModeFxaa : postMode,
             postAaQuality = GetPostAntiAliasingQuality(),
+            displayMode = GetDisplayMode(),
+            targetFrameRate = GetTargetFrameRate(),
         };
     }
 
     public static void SaveSnapshot(GraphicsSettingsSnapshot snapshot)
     {
+        snapshot.displayMode = ClampDisplayMode(snapshot.displayMode);
+        snapshot.targetFrameRate = ClampTargetFrameRate(snapshot.targetFrameRate);
         GameSettingsStore.SetGraphicsQuality(snapshot);
     }
 

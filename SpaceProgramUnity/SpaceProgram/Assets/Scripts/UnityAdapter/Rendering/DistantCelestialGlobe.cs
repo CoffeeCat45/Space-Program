@@ -11,6 +11,12 @@ public sealed class DistantCelestialGlobe : MonoBehaviour
 {
     public const float UnitDiameterMeshRadius = 0.5f;
 
+    public static bool IsAttached(GameObject bodyObject)
+    {
+        return bodyObject != null &&
+            bodyObject.GetComponent<DistantCelestialGlobe>() != null;
+    }
+
     public string BodyName { get; private set; }
 
     Material runtimeMaterial;
@@ -108,16 +114,16 @@ public sealed class DistantCelestialGlobe : MonoBehaviour
             return;
         }
 
-        runtimeMaterial.renderQueue = mapMode ?
-            (int)UnityEngine.Rendering.RenderQueue.Geometry :
-            PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue;
+        bool isMoon = BodyName == CelestialTerrainRuntime.MoonBodyName;
 
-        // Opaque Earth ZWrite at ~4.5 Mm kills the 8 km cloud shell (ZTest).
-        // Limb still shows: those pixels miss the disk. Flight Earth globe
-        // composites by queue; the Moon's terrain still occludes via ZTest.
-        bool writeDepth = mapMode || BodyName == CelestialTerrainRuntime.MoonBodyName;
-        runtimeMaterial.SetFloat("_ZWrite", writeDepth ? 1f : 0f);
-        runtimeMaterial.SetOverrideTag("RenderType", writeDepth ? "Opaque" : "Transparent");
+        if (isMoon)
+        {
+            PlanetDistantVisualPolicy.ApplyMoonGlobeCompositing(runtimeMaterial, mapMode);
+        }
+        else
+        {
+            PlanetDistantVisualPolicy.ApplyEarthColorGlobeCompositing(runtimeMaterial, mapMode);
+        }
 
         if (cloudLayers != null)
         {

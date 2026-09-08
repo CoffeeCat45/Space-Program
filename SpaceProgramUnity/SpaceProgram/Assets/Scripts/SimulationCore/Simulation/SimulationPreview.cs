@@ -581,6 +581,21 @@ class SimulationPreview
             return ClosestApproachInfo.None();
         }
 
+        Body liveTarget = simulation.GetBodyByName(targetBodyName);
+        if (liveTarget != null && simulation.ship != null)
+        {
+            double currentDistance = simulation.ship.position
+                .Subtract(liveTarget.position)
+                .Length();
+            double influenceRadius = liveTarget.sphereOfInfluenceRadius > 0.0 ?
+                liveTarget.sphereOfInfluenceRadius :
+                liveTarget.radius;
+            if (influenceRadius > 0.0 && currentDistance <= influenceRadius)
+            {
+                return ClosestApproachInfo.None();
+            }
+        }
+
         Simulation copy = simulation.CreateCopy();
         copy.ship.thrust = SimVector3.Zero();
         Body targetBody = copy.GetBodyByName(targetBodyName);
@@ -797,101 +812,120 @@ class SimulationPreview
         double burnDt
     )
     {
-        if (!simulation.ScenarioHasSun())
+        if (
+            !simulation.ScenarioHasSun() ||
+            simulation.planet == null ||
+            simulation.ship == null
+        )
         {
             return SphereOfInfluenceEntryPreview.None();
         }
 
-        Simulation copy = simulation.CreateCopy();
-        copy.ship.thrust = SimVector3.Zero();
+        return GetOutgoingSphereOfInfluencePreview(
+            simulation.planet,
+            simulation.planetSphereOfInfluenceRadius,
+            "Sun",
+            plannedDeltaV,
+            maneuverTime
+        );
+    }
 
-        List<SimVector3> points = new List<SimVector3>();
-        SimVector3 previousShipPosition = copy.ship.position;
-        SimVector3 previousPlanetPosition = copy.planet.position;
-        double previousDistanceToPlanet = copy.GetShipDistanceToPlanet();
-        points.Add(previousShipPosition);
-
-        if (previousDistanceToPlanet > copy.planetSphereOfInfluenceRadius)
+    public SphereOfInfluenceEntryPreview GetOutgoingSphereOfInfluencePreview(
+        Body primary,
+        double soiRadius,
+        string nextBodyName,
+        SimVector3 plannedDeltaV,
+        double maneuverTime
+    )
+    {
+        if (
+            primary == null ||
+            simulation.ship == null ||
+            soiRadius <= 0.0 ||
+            string.IsNullOrEmpty(nextBodyName)
+        )
         {
-            SimVector3[] sunOrbitPathPoints = OrbitalMechanics.BuildOrbitPathRelativeToBody(
-                copy.sun,
-                copy.ship.position,
-                copy.ship.velocity,
-                240
-            );
-
-            return new SphereOfInfluenceEntryPreview(
-                true,
-                0,
-                copy.ship.position,
-                points.ToArray(),
-                sunOrbitPathPoints,
-                "Sun"
-            );
+            return SphereOfInfluenceEntryPreview.None();
         }
 
-        for (int i = 1; i <= stepCount; i++)
+        SimVector3 relativeVelocity = simulation.ship.velocity.Subtract(primary.velocity);
+        if (plannedDeltaV.LengthSquared() > 0.0 && maneuverTime <= 1.0e-9)
         {
-            double previewTime = (i - 1) * dt;
-
-            AdvancePreviewWithFiniteBurn(
-                copy,
-                plannedDeltaV,
-                thrustForce,
-                burnDuration,
-                maneuverTime,
-                previewTime,
-                dt,
-                burnDt
-            );
-
-            double distanceToPlanet = copy.GetShipDistanceToPlanet();
-
-            if (distanceToPlanet > copy.planetSphereOfInfluenceRadius)
-            {
-                double exitFraction = CalculateSphereOfInfluenceExitFraction(
-                    previousDistanceToPlanet,
-                    distanceToPlanet,
-                    copy.planetSphereOfInfluenceRadius
-                );
-                SimVector3 exitPosition = Lerp(
-                    previousShipPosition,
-                    copy.ship.position,
-                    exitFraction
-                );
-                Body exitPlanet = simulation.CopyBody(copy.planet);
-                exitPlanet.position = Lerp(
-                    previousPlanetPosition,
-                    copy.planet.position,
-                    exitFraction
-                );
-
-                points.Add(exitPosition);
-
-                SimVector3[] sunOrbitPathPoints = OrbitalMechanics.BuildOrbitPathRelativeToBody(
-                    copy.sun,
-                    exitPosition,
-                    copy.ship.velocity,
-                    240
-                );
-
-                return new SphereOfInfluenceEntryPreview(
-                    true,
-                    (i - 1 + exitFraction) * dt,
-                    exitPosition,
-                    points.ToArray(),
-                    sunOrbitPathPoints,
-                    "Sun"
-                );
-            }
-
-            points.Add(copy.ship.position);
-            previousShipPosition = copy.ship.position;
-            previousPlanetPosition = copy.planet.position;
-            previousDistanceToPlanet = distanceToPlanet;
+            relativeVelocity = relativeVelocity.Add(plannedDeltaV);
         }
 
-        return SphereOfInfluenceEntryPreview.None();
+        if (
+            !OrbitalMechanics.OrbitReachesRadius(
+                primary.position,
+                primary.mu,
+                simulation.ship.position,
+                relativeVelocity,
+                soiRadius
+            )
+        )
+        {
+            return SphereOfInfluenceEntryPreview.None();
+        }
+
+        if (
+            !OrbitalMechanics.TryGetOutgoingRadiusCrossing(
+                primary.position,
+                primary.mu,
+                simulation.ship.position,
+                relativeVelocity,
+                soiRadius,
+                out SimVector3 exitPosition,
+                out SimVector3 exitRelativeVelocity,
+                out double exitTime
+            )
+        )
+        {
+            return SphereOfInfluenceEntryPreview.None();
+        }
+
+        return new SphereOfInfluenceEntryPreview(
+            true,
+            exitTime,
+            exitPosition,
+            BuildPatchedConicAfterSphereOfInfluenceExit(
+                primary,
+                exitPosition,
+                exitRelativeVelocity,
+                nextBodyName
+            ),
+            Array.Empty<SimVector3>(),
+            nextBodyName
+        );
+    }
+
+    SimVector3[] BuildPatchedConicAfterSphereOfInfluenceExit(
+        Body currentPrimary,
+        SimVector3 exitPosition,
+        SimVector3 exitRelativeVelocity,
+        string nextBodyName
+    )
+    {
+        Body nextBody = simulation.GetBodyByName(nextBodyName);
+        if (
+            nextBody == null ||
+            currentPrimary == null ||
+            nextBody == currentPrimary
+        )
+        {
+            return Array.Empty<SimVector3>();
+        }
+
+        SimVector3 inertialVelocity = currentPrimary.velocity.Add(exitRelativeVelocity);
+        SimVector3 nextRelativeVelocity = inertialVelocity.Subtract(nextBody.velocity);
+        return OrbitalMechanics.BuildOrbitPath(
+            nextBody.position,
+            nextBody.mu,
+            nextBody.radius,
+            exitPosition,
+            nextRelativeVelocity,
+            240,
+            nextBody.sphereOfInfluenceRadius
+        );
     }
 
     public void AdvancePreviewToTime(Simulation copy, double time, double dt)

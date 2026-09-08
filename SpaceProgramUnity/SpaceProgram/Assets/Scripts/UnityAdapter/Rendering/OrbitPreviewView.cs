@@ -8,7 +8,7 @@ public class OrbitPreviewView : MonoBehaviour
     public int previewPointCount = 512;
     public int updateEveryFrames = 20;
     public bool showClosestApproachWorldMarker = false;
-    public bool showClosestApproachPoint = true;
+    public bool showClosestApproachPoint = false;
     public float closestApproachPointSize = 0.18f;
     public float closestApproachPointMoveThreshold = 2.0f;
     public bool showSphereOfInfluenceEntryPreview = true;
@@ -22,28 +22,30 @@ public class OrbitPreviewView : MonoBehaviour
     public float maneuverHandleWidth = 0.045f;
     public float maneuverNodePickRadiusPixels = 20.0f;
     public float maneuverNodeDragRadiusPixels = 180.0f;
-    public double nearCircularMarkerEccentricity = 0.001;
     public float highlightedMarkerScale = 1.35f;
     public float eventLabelOffsetY = 0.38f;
-    public bool showGhostTarget = true;
+    public bool showGhostTarget = false;
     public bool showVesselTargetMarkers = false;
     public bool showOrbitLegend = true;
+    static readonly bool ShowManeuverNodeOverlay = false;
 
-    static readonly Color EventColorPeAp = new Color(0.0f, 1.0f, 1.0f);
-    static readonly Color EventColorPlanned = new Color(1.0f, 0.85f, 0.0f);
+    static readonly Color EventColorPe = new Color(0.12f, 0.82f, 0.78f, 1.0f);
+    static readonly Color EventColorAp = new Color(0.12f, 0.82f, 0.78f, 1.0f);
+    static readonly Color EventColorPlanned = new Color(0.42f, 0.34f, 0.12f, 1.0f);
     static readonly Color EventColorCA = new Color(1.0f, 0.75f, 0.95f);
     static readonly Color EventColorGhost = new Color(1.0f, 0.45f, 0.9f);
     static readonly Color EventColorSoI = new Color(1.0f, 0.88f, 0.2f);
     static readonly Color EventColorNode = new Color(1.0f, 0.88f, 0.2f);
     static readonly Color EventColorBurn = new Color(1.0f, 0.55f, 0.15f);
 
-    static readonly Color CurrentOrbitLineColor = new Color(0.0f, 0.95f, 1.0f, 0.8f);
-    static readonly Color PlannedOrbitLineColor = new Color(1.0f, 0.82f, 0.0f, 0.9f);
+    static readonly Color CurrentOrbitLineColor = new Color(0.72f, 0.74f, 0.76f, 0.97f);
+    static readonly Color PlannedOrbitLineColor = new Color(1.0f, 0.82f, 0.0f, 0.97f);
     static readonly Color SoiEntryLineColor = new Color(1.0f, 0.85f, 0.0f, 0.95f);
     static readonly Color MoonSoiOrbitLineColor = new Color(0.4f, 1.0f, 0.55f, 0.95f);
     static readonly Color BackgroundCelestialOrbitLineColor =
-        new Color(0.58f, 0.68f, 0.78f, 0.42f);
+        new Color(0.60f, 0.62f, 0.64f, 0.40f);
     const float OrbitMarkerScreenHeightFraction = 0.080f;
+    const float OrbitPinBadgeScreenHeightFraction = 0.036f;
     const float OrbitMarkerTextMeshSizeMultiplier = 2.75f;
 
     Simulation simulation;
@@ -117,11 +119,19 @@ public class OrbitPreviewView : MonoBehaviour
     double cachedPeriapsisTime;
     double cachedApoapsisTime;
     bool hasHoveredOrbitPoint;
+    bool hasHoveredPeApMarker;
+    bool hoveredPeApIsPeriapsis;
+    bool hoveredPeApIsPlanned;
+    double hoveredPeApAltitude;
+    double hoveredPeApTime;
     bool showWarpContextMenu;
     bool isDraggingManeuverNode;
+    GUIStyle hoverTooltipBoxStyle;
+    GUIStyle hoverTooltipLabelStyle;
     bool orbitOverlayClearedForFlight;
     global::SimVector3[] cachedCurrentOrbitSimPath = Array.Empty<global::SimVector3>();
     string cachedCurrentOrbitLayoutBodyName = string.Empty;
+    string cachedOrbitOccluderBodyName = string.Empty;
     global::SimVector3[] cachedPlannedOrbitSimPath = Array.Empty<global::SimVector3>();
     UnityEngine.Vector3[] currentOrbitWorldBuffer = Array.Empty<UnityEngine.Vector3>();
     readonly System.Collections.Generic.Dictionary<TextMesh, float> markerBaseScreenHeightFractions =
@@ -197,10 +207,34 @@ public class OrbitPreviewView : MonoBehaviour
             OrbitLineVisualUtility.MoonSoiOrbitPixelWidth
         );
 
-        periapsisMarker = CreateOrbitMarker("Current Pe Marker", "Pe", EventColorPeAp);
-        apoapsisMarker = CreateOrbitMarker("Current Ap Marker", "Ap", EventColorPeAp);
-        plannedPeriapsisMarker = CreateOrbitMarker("Planned Pe Marker", "Pe", EventColorPlanned);
-        plannedApoapsisMarker = CreateOrbitMarker("Planned Ap Marker", "Ap", EventColorPlanned);
+        periapsisMarker = CreateOrbitMarker(
+            "Current Pe Marker",
+            "Pe",
+            EventColorPe,
+            OrbitPinBadgeScreenHeightFraction,
+            pinBadge: true
+        );
+        apoapsisMarker = CreateOrbitMarker(
+            "Current Ap Marker",
+            "Ap",
+            EventColorAp,
+            OrbitPinBadgeScreenHeightFraction,
+            pinBadge: true
+        );
+        plannedPeriapsisMarker = CreateOrbitMarker(
+            "Planned Pe Marker",
+            "Pe",
+            EventColorPlanned,
+            OrbitPinBadgeScreenHeightFraction,
+            pinBadge: true
+        );
+        plannedApoapsisMarker = CreateOrbitMarker(
+            "Planned Ap Marker",
+            "Ap",
+            EventColorPlanned,
+            OrbitPinBadgeScreenHeightFraction,
+            pinBadge: true
+        );
         closestApproachMarker = CreateOrbitMarker("Closest Approach Marker", "CA", EventColorCA);
         closestApproachDistanceMarker = CreateOrbitMarker("Closest Approach Distance Marker", "CA", EventColorCA);
         closestApproachTargetMarker = CreateOrbitMarker("Closest Approach Target Marker", "Ghost", EventColorGhost);
@@ -226,7 +260,6 @@ public class OrbitPreviewView : MonoBehaviour
         CreateManeuverNodePoint();
         CreateBurnStartPoint();
         CreateManeuverHandleLines();
-        OrbitLineVisualUtility.ApplyOverlayLayerRecursive(transform);
     }
 
     LineRenderer CreateOrbitLine(string lineName, Color color, float pixelWidth)
@@ -259,17 +292,12 @@ public class OrbitPreviewView : MonoBehaviour
                 orbitOverlayClearedForFlight = true;
             }
 
+            ApplyOrbitLineOccluder(enabled: false);
             return;
         }
 
         orbitOverlayClearedForFlight = false;
-        frameCounter++;
-
-        if (frameCounter >= updateEveryFrames)
-        {
-            frameCounter = 0;
-            UpdatePreview();
-        }
+        UpdatePreview();
 
         bool renderStateChanged =
             runner != null &&
@@ -288,6 +316,8 @@ public class OrbitPreviewView : MonoBehaviour
         }
 
         RefreshOrbitLineWorldPositions();
+        ApplyOrbitLineOccluder(enabled: true);
+        ApplyPinBadgeScreenSizes();
     }
 
     void RefreshOrbitLineWorldPositions()
@@ -419,31 +449,13 @@ public class OrbitPreviewView : MonoBehaviour
             string bodyName = bodyNames[i];
             activeBodyNames.Add(bodyName);
 
-            if (bodyName == focusedBodyName)
+            if (ShouldSkipBackgroundOrbit(bodyName, focusedBodyName))
             {
                 ClearLineRenderer(GetBackgroundOrbitLine(bodyName));
                 continue;
             }
 
             LineRenderer backgroundLine = GetBackgroundOrbitLine(bodyName);
-
-            if (
-                simulation.IsVesselBodyName(bodyName) &&
-                !simulation.IsVesselBodyName(focusedBodyName)
-            )
-            {
-                ClearLineRenderer(backgroundLine);
-                continue;
-            }
-
-            if (
-                simulation.IsVesselBodyName(bodyName) &&
-                simulation.GetFlightStatus() == FlightStatus.Landed
-            )
-            {
-                ClearLineRenderer(backgroundLine);
-                continue;
-            }
 
             if (simulation.TryGetOrbitParentBody(bodyName) == null)
             {
@@ -478,6 +490,31 @@ public class OrbitPreviewView : MonoBehaviour
         }
     }
 
+    bool ShouldSkipBackgroundOrbit(string bodyName, string focusedBodyName)
+    {
+        if (string.IsNullOrEmpty(bodyName) || simulation == null)
+        {
+            return true;
+        }
+
+        if (simulation.IsVesselBodyName(bodyName) || bodyName == focusedBodyName)
+        {
+            return true;
+        }
+
+        string viewBodyName = focusedBodyName;
+        if (simulation.IsVesselBodyName(focusedBodyName))
+        {
+            Body primaryBody = simulation.GetActivePrimaryBody();
+            if (primaryBody != null)
+            {
+                viewBodyName = primaryBody.name;
+            }
+        }
+
+        return bodyName == viewBodyName;
+    }
+
     void ClearBackgroundMapOrbits()
     {
         foreach (System.Collections.Generic.KeyValuePair<string, LineRenderer> entry in
@@ -491,6 +528,7 @@ public class OrbitPreviewView : MonoBehaviour
     {
         cachedCurrentOrbitSimPath = Array.Empty<global::SimVector3>();
         cachedCurrentOrbitLayoutBodyName = string.Empty;
+        cachedOrbitOccluderBodyName = string.Empty;
         ClearLineRenderer(lineRenderer);
         HideMarkers(periapsisMarker, apoapsisMarker);
         ClearOrbitMarkerCache(isPlannedMarker: false);
@@ -513,6 +551,7 @@ public class OrbitPreviewView : MonoBehaviour
             cachedCurrentOrbitLayoutBodyName = string.Empty;
             HideMarkers(periapsisMarker, apoapsisMarker);
             ClearOrbitMarkerCache(isPlannedMarker: false);
+            cachedOrbitOccluderBodyName = string.Empty;
             return;
         }
 
@@ -523,6 +562,7 @@ public class OrbitPreviewView : MonoBehaviour
             );
         cachedCurrentOrbitSimPath = orbitPoints;
         cachedCurrentOrbitLayoutBodyName = orbitFocusBodyName;
+        cachedOrbitOccluderBodyName = orbitFocusBodyName;
         DrawOrbit(
             lineRenderer,
             orbitPoints,
@@ -531,27 +571,25 @@ public class OrbitPreviewView : MonoBehaviour
         );
         MarkOrbitRenderStateCurrent();
 
-        simulation.TryGetBodyPeriapsisAltitudeRelativeToParent(
-            orbitFocusBodyName,
-            out double periapsisAltitude
-        );
-        simulation.TryGetBodyApoapsisAltitudeRelativeToParent(
-            orbitFocusBodyName,
-            out double apoapsisAltitude
-        );
-
-        UpdateOrbitMarkers(
-            periapsisMarker,
-            apoapsisMarker,
-            orbitPoints,
-            parentBody.position,
-            parentBody.radius,
-            periapsisAltitude,
-            apoapsisAltitude,
-            double.NaN,
-            double.NaN,
-            MapOrbitIsHeliocentric(orbitFocusBodyName)
-        );
+        Body focusedBody = simulation.GetBodyByName(orbitFocusBodyName);
+        if (focusedBody != null)
+        {
+            UpdateOrbitApsideMarkers(
+                periapsisMarker,
+                apoapsisMarker,
+                parentBody,
+                focusedBody.position,
+                focusedBody.velocity,
+                double.NaN,
+                double.NaN,
+                MapOrbitIsHeliocentric(orbitFocusBodyName)
+            );
+        }
+        else
+        {
+            HideMarkers(periapsisMarker, apoapsisMarker);
+            ClearOrbitMarkerCache(isPlannedMarker: false);
+        }
     }
 
     void HideShipOrbitOverlayExtras()
@@ -610,31 +648,33 @@ public class OrbitPreviewView : MonoBehaviour
         }
 
         string orbitFocusBodyName = runner.GetOrbitFocusBodyName();
-        bool focusIsShip = simulation.IsVesselBodyName(orbitFocusBodyName);
+        bool flying = simulation.GetFlightStatus() != FlightStatus.Landed;
 
         UpdateBackgroundMapOrbits(orbitFocusBodyName);
 
-        if (focusIsShip)
+        if (flying)
         {
-            if (simulation.GetFlightStatus() == FlightStatus.Landed)
-            {
-                ClearFocusedOrbitLineAndMarkers();
-                HideShipOrbitOverlayExtras();
-                return;
-            }
+            UpdateFlyingShipOrbitOverlay();
+            return;
         }
-        else if (
-            simulation.sun != null &&
-            orbitFocusBodyName == simulation.sun.name
-        )
+
+        HideShipOrbitOverlayExtras();
+
+        if (simulation.IsVesselBodyName(orbitFocusBodyName))
+        {
+            ClearFocusedOrbitLineAndMarkers();
+            return;
+        }
+
+        UpdateCelestialOrbitFocusOverlay(orbitFocusBodyName);
+    }
+
+    void UpdateFlyingShipOrbitOverlay()
+    {
+        if (simulation == null || simulation.ship == null || lineRenderer == null)
         {
             ClearFocusedOrbitLineAndMarkers();
             HideShipOrbitOverlayExtras();
-            return;
-        }
-        else
-        {
-            UpdateCelestialOrbitFocusOverlay(orbitFocusBodyName);
             return;
         }
 
@@ -643,29 +683,22 @@ public class OrbitPreviewView : MonoBehaviour
         SetOrbitLinePixelWidth(OrbitLineVisualUtility.CurrentOrbitPixelWidth);
         global::SimVector3[] orbitPoints =
             simulation.GetShipOrbitPathRelativeToActivePrimary(previewPointCount);
+        string shipLayoutName = simulation.ship.name;
         cachedCurrentOrbitSimPath = orbitPoints;
-        cachedCurrentOrbitLayoutBodyName = orbitFocusBodyName;
-        DrawOrbit(lineRenderer, orbitPoints, ref currentOrbitWorldBuffer, orbitFocusBodyName);
+        cachedCurrentOrbitLayoutBodyName = shipLayoutName;
+        Body activePrimary = simulation.GetActivePrimaryBody();
+        cachedOrbitOccluderBodyName = activePrimary != null ? activePrimary.name : string.Empty;
+        DrawOrbit(lineRenderer, orbitPoints, ref currentOrbitWorldBuffer, shipLayoutName);
         MarkOrbitRenderStateCurrent();
-        if (plannedDeltaV.LengthSquared() == 0.0)
-        {
-            UpdateOrbitMarkers(
-                periapsisMarker,
-                apoapsisMarker,
-                orbitPoints,
-                simulation.GetActivePrimaryPosition(),
-                simulation.GetActivePrimaryRadius(),
-                simulation.GetShipPeriapsisAltitudeRelativeToActivePrimary(),
-                simulation.GetShipApoapsisAltitudeRelativeToActivePrimary(),
-                runner.GetTimeToPeriapsis(),
-                runner.GetTimeToApoapsis()
-            );
-        }
-        else
-        {
-            HideMarkers(periapsisMarker, apoapsisMarker);
-            ClearOrbitMarkerCache(isPlannedMarker: false);
-        }
+        UpdateOrbitApsideMarkers(
+            periapsisMarker,
+            apoapsisMarker,
+            activePrimary,
+            simulation.ship.position,
+            simulation.ship.velocity,
+            runner.GetTimeToPeriapsis(),
+            runner.GetTimeToApoapsis()
+        );
 
         UpdateManeuverNodePoint();
         UpdateBurnStartMarker();
@@ -714,14 +747,12 @@ public class OrbitPreviewView : MonoBehaviour
         cachedPlannedOrbitSimPath = plannedOrbitPoints;
         DrawOrbit(plannedLineRenderer, plannedOrbitPoints, ref plannedOrbitWorldBuffer);
         MarkOrbitRenderStateCurrent();
-        UpdateOrbitMarkers(
+        UpdateOrbitApsideMarkers(
             plannedPeriapsisMarker,
             plannedApoapsisMarker,
-            plannedOrbitPoints,
-            simulation.GetActivePrimaryPosition(),
-            simulation.GetActivePrimaryRadius(),
-            simulation.GetPreviewShipPeriapsisAltitudeRelativeToActivePrimary(plannedDeltaV),
-            simulation.GetPreviewShipApoapsisAltitudeRelativeToActivePrimary(plannedDeltaV)
+            simulation.GetActivePrimaryBody(),
+            simulation.ship.position,
+            simulation.ship.velocity.Add(plannedDeltaV)
         );
     }
 
@@ -814,17 +845,18 @@ public class OrbitPreviewView : MonoBehaviour
         global::SimVector3 simulationPosition
     )
     {
-        if (marker == null || !marker.gameObject.activeSelf)
+        if (marker == null || !IsMarkerVisible(marker))
         {
             return;
         }
 
-        marker.transform.position =
+        SetMarkerWorldPosition(
+            marker,
             ToLayoutWorldPosition(
                 simulationPosition,
                 MapOrbitIsHeliocentric(cachedCurrentOrbitLayoutBodyName)
-            ) +
-            new UnityEngine.Vector3(0.0f, eventLabelOffsetY, 0.0f);
+            ) + GetOrbitMarkerDisplayOffset(marker)
+        );
     }
 
     void UpdateHoverPredictionForVisiblePath(
@@ -865,51 +897,55 @@ public class OrbitPreviewView : MonoBehaviour
         out double[] predictionTimes
     )
     {
-        if (hoverPredictionStepCount <= 0 || hoverPredictionDt <= 0)
+        if (simulation == null || simulation.ship == null)
+        {
+            predictionTimes = Array.Empty<double>();
+            return Array.Empty<UnityEngine.Vector3>();
+        }
+
+        global::SimVector3[] orbitPoints =
+            plannedDeltaV.LengthSquared() > 0.0 ?
+            simulation.GetPreviewShipOrbitPathRelativeToActivePrimary(
+                plannedDeltaV,
+                previewPointCount
+            ) :
+            simulation.GetShipOrbitPathRelativeToActivePrimary(previewPointCount);
+
+        if (orbitPoints.Length < 2)
         {
             predictionTimes = Array.Empty<double>();
             return Array.Empty<UnityEngine.Vector3>();
         }
 
         double orbitPeriod =
-            plannedDeltaV.LengthSquared() > 0 ?
-            runner.GetPlannedOrbitPeriod() :
+            plannedDeltaV.LengthSquared() > 0.0 ?
+            simulation.GetPreviewShipOrbitalPeriodRelativeToActivePrimary(plannedDeltaV) :
             simulation.GetShipOrbitalPeriodRelativeToActivePrimary();
-        bool isClosedOrbit =
+        bool hasKeplerPeriod =
+            !double.IsNaN(orbitPeriod) &&
             !double.IsInfinity(orbitPeriod) &&
-            orbitPeriod > hoverPredictionDt;
+            orbitPeriod > 0.0;
+        bool polylineClosed =
+            GetUniqueClosedOrbitPointCount(orbitPoints) < orbitPoints.Length;
 
-        if (isClosedOrbit)
+        if (hasKeplerPeriod || polylineClosed)
         {
-            global::SimVector3[] orbitPoints =
-                plannedDeltaV.LengthSquared() > 0 ?
-                runner.GetPlannedOrbitPath(previewPointCount) :
-                simulation.GetShipOrbitPathRelativeToActivePrimary(
-                    previewPointCount
-                );
+            double closedPeriod = hasKeplerPeriod ?
+                orbitPeriod :
+                EstimateClosedPathPeriod(orbitPoints);
             return BuildHoverPredictionFromOrbitPoints(
                 orbitPoints,
-                orbitPeriod,
+                closedPeriod,
                 simulation.ship.position,
                 out predictionTimes
             );
         }
 
-        Simulation preview = simulation.CreateCopy();
-        preview.ship.thrust = global::SimVector3.Zero();
-        int sampleCount = hoverPredictionStepCount;
-        double sampleDt = hoverPredictionDt;
-        UnityEngine.Vector3[] predictionWorldPoints = new UnityEngine.Vector3[sampleCount + 1];
-        predictionTimes = new double[sampleCount + 1];
-
-        for (int i = 0; i <= sampleCount; i++)
-        {
-            predictionWorldPoints[i] = ToWorldPosition(preview.ship.position);
-            predictionTimes[i] = i * sampleDt;
-            preview.Update(sampleDt);
-        }
-
-        return predictionWorldPoints;
+        return BuildHoverPredictionFromOpenOrbitPoints(
+            orbitPoints,
+            simulation.ship.position,
+            out predictionTimes
+        );
     }
 
     UnityEngine.Vector3[] ToWorldPositions(global::SimVector3[] simulationPoints)
@@ -974,6 +1010,77 @@ public class OrbitPreviewView : MonoBehaviour
         return predictionWorldPoints;
     }
 
+    UnityEngine.Vector3[] BuildHoverPredictionFromOpenOrbitPoints(
+        global::SimVector3[] orbitPoints,
+        global::SimVector3 currentShipPosition,
+        out double[] predictionTimes
+    )
+    {
+        int startIndex = FindClosestOrbitPointIndex(
+            orbitPoints,
+            orbitPoints.Length,
+            currentShipPosition
+        );
+        int pointCount = orbitPoints.Length - startIndex;
+
+        if (pointCount < 2)
+        {
+            startIndex = 0;
+            pointCount = orbitPoints.Length;
+        }
+
+        UnityEngine.Vector3[] predictionWorldPoints = new UnityEngine.Vector3[pointCount];
+        predictionTimes = new double[pointCount];
+        double relativeSpeed = GetHoverRelativeSpeedMetersPerSecond();
+        double accumulatedTime = 0.0;
+        predictionWorldPoints[0] = ToWorldPosition(orbitPoints[startIndex]);
+        predictionTimes[0] = 0.0;
+
+        for (int i = 1; i < pointCount; i++)
+        {
+            int orbitIndex = startIndex + i;
+            accumulatedTime +=
+                orbitPoints[orbitIndex].Subtract(orbitPoints[orbitIndex - 1]).Length() /
+                relativeSpeed;
+            predictionWorldPoints[i] = ToWorldPosition(orbitPoints[orbitIndex]);
+            predictionTimes[i] = accumulatedTime;
+        }
+
+        return predictionWorldPoints;
+    }
+
+    double EstimateClosedPathPeriod(global::SimVector3[] orbitPoints)
+    {
+        int uniqueCount = GetUniqueClosedOrbitPointCount(orbitPoints);
+        if (uniqueCount < 2)
+        {
+            return 1.0;
+        }
+
+        double pathLength = 0.0;
+        for (int i = 0; i < uniqueCount; i++)
+        {
+            int nextIndex = (i + 1) % uniqueCount;
+            pathLength += orbitPoints[i].Subtract(orbitPoints[nextIndex]).Length();
+        }
+
+        return pathLength / GetHoverRelativeSpeedMetersPerSecond();
+    }
+
+    double GetHoverRelativeSpeedMetersPerSecond()
+    {
+        if (simulation == null || simulation.ship == null)
+        {
+            return 1.0;
+        }
+
+        Body primary = simulation.GetActivePrimaryBody();
+        global::SimVector3 relativeVelocity = primary == null ?
+            simulation.ship.velocity :
+            simulation.ship.velocity.Subtract(primary.velocity);
+        return Math.Max(relativeVelocity.Length(), 1.0);
+    }
+
     int GetUniqueClosedOrbitPointCount(global::SimVector3[] orbitPoints)
     {
         if (orbitPoints.Length < 2)
@@ -1019,12 +1126,8 @@ public class OrbitPreviewView : MonoBehaviour
 
     void UpdateOrbitHover()
     {
-        if (
-            Camera.main == null ||
-            Mouse.current == null ||
-            orbitHoverPoint == null ||
-            hoverPredictionWorldPoints.Length == 0
-        )
+        Camera camera = Camera.main;
+        if (camera == null || Mouse.current == null)
         {
             HideOrbitHoverPoint();
             return;
@@ -1048,10 +1151,12 @@ public class OrbitPreviewView : MonoBehaviour
         }
 
         if (
+            ShowManeuverNodeOverlay &&
             runner != null &&
             runner.HasManeuverNode() &&
             leftMousePressed &&
             IsMouseNearWorldPoint(
+                camera,
                 mousePosition,
                 maneuverNodeWorldPosition,
                 maneuverNodePickRadiusPixels
@@ -1062,14 +1167,16 @@ public class OrbitPreviewView : MonoBehaviour
             showWarpContextMenu = false;
         }
 
-        if (isDraggingManeuverNode)
+        if (ShowManeuverNodeOverlay && isDraggingManeuverNode)
         {
             if (!leftMouseHeld)
             {
                 isDraggingManeuverNode = false;
             }
             else if (
+                hoverPredictionWorldPoints.Length > 0 &&
                 TryFindClosestPredictionPoint(
+                    camera,
                     mousePosition,
                     maneuverNodeDragRadiusPixels,
                     out UnityEngine.Vector3 dragWorldPosition,
@@ -1084,13 +1191,37 @@ public class OrbitPreviewView : MonoBehaviour
                 hoveredOrbitPointPosition = dragWorldPosition;
                 hoveredOrbitPointTime = dragTime;
                 hasHoveredOrbitPoint = true;
-                orbitHoverPoint.SetActive(false);
+                hasHoveredPeApMarker = false;
+
+                if (orbitHoverPoint != null)
+                {
+                    orbitHoverPoint.SetActive(false);
+                }
+
                 return;
             }
         }
 
+        if (TryHoverPeApMarker(camera, mousePosition, rightMousePressed))
+        {
+            return;
+        }
+
+        hasHoveredPeApMarker = false;
+
+        if (orbitHoverPoint == null || hoverPredictionWorldPoints.Length == 0)
+        {
+            if (!showWarpContextMenu)
+            {
+                HideOrbitHoverPoint();
+            }
+
+            return;
+        }
+
         if (
             !TryFindClosestPredictionPoint(
+                camera,
                 mousePosition,
                 hoverPickRadiusPixels,
                 out UnityEngine.Vector3 closestWorldPosition,
@@ -1131,7 +1262,213 @@ public class OrbitPreviewView : MonoBehaviour
 
     }
 
+    bool TryHoverPeApMarker(
+        Camera camera,
+        UnityEngine.Vector2 mousePosition,
+        bool rightMousePressed
+    )
+    {
+        if (
+            !TryFindClosestPeApMarker(
+                camera,
+                mousePosition,
+                out TextMesh marker,
+                out bool isPeriapsis,
+                out bool isPlanned,
+                out UnityEngine.Vector3 markerWorldPosition
+            )
+        )
+        {
+            return false;
+        }
+
+        ResolvePeApHoverData(
+            isPeriapsis,
+            isPlanned,
+            out double altitude,
+            out double time
+        );
+
+        hasHoveredPeApMarker = true;
+        hoveredPeApIsPeriapsis = isPeriapsis;
+        hoveredPeApIsPlanned = isPlanned;
+        hoveredPeApAltitude = altitude;
+        hoveredPeApTime = time;
+        hoveredOrbitPointPosition = markerWorldPosition;
+
+        if (!showWarpContextMenu)
+        {
+            hoverGuiPosition = new UnityEngine.Vector2(
+                mousePosition.x + 16.0f,
+                Screen.height - mousePosition.y + 16.0f
+            );
+        }
+
+        bool hasWarpTime =
+            !double.IsNaN(time) &&
+            !double.IsInfinity(time) &&
+            time >= 0.0;
+        hasHoveredOrbitPoint = hasWarpTime;
+
+        if (hasWarpTime)
+        {
+            hoveredOrbitPointTime = time;
+        }
+
+        if (orbitHoverPoint != null)
+        {
+            orbitHoverPoint.SetActive(false);
+        }
+
+        if (rightMousePressed && hasWarpTime)
+        {
+            showWarpContextMenu = true;
+            warpMenuTime = time;
+            warpMenuWorldPosition = markerWorldPosition;
+            warpMenuGuiPosition = hoverGuiPosition;
+        }
+
+        return true;
+    }
+
+    bool TryFindClosestPeApMarker(
+        Camera camera,
+        UnityEngine.Vector2 mousePosition,
+        out TextMesh marker,
+        out bool isPeriapsis,
+        out bool isPlanned,
+        out UnityEngine.Vector3 markerWorldPosition
+    )
+    {
+        marker = null;
+        isPeriapsis = false;
+        isPlanned = false;
+        markerWorldPosition = UnityEngine.Vector3.zero;
+        float closestDistance = float.MaxValue;
+
+        ConsiderPeApMarkerPick(
+            camera,
+            mousePosition,
+            plannedPeriapsisMarker,
+            isCandidatePeriapsis: true,
+            isCandidatePlanned: true,
+            ref closestDistance,
+            ref marker,
+            ref isPeriapsis,
+            ref isPlanned,
+            ref markerWorldPosition
+        );
+        ConsiderPeApMarkerPick(
+            camera,
+            mousePosition,
+            plannedApoapsisMarker,
+            isCandidatePeriapsis: false,
+            isCandidatePlanned: true,
+            ref closestDistance,
+            ref marker,
+            ref isPeriapsis,
+            ref isPlanned,
+            ref markerWorldPosition
+        );
+        ConsiderPeApMarkerPick(
+            camera,
+            mousePosition,
+            periapsisMarker,
+            isCandidatePeriapsis: true,
+            isCandidatePlanned: false,
+            ref closestDistance,
+            ref marker,
+            ref isPeriapsis,
+            ref isPlanned,
+            ref markerWorldPosition
+        );
+        ConsiderPeApMarkerPick(
+            camera,
+            mousePosition,
+            apoapsisMarker,
+            isCandidatePeriapsis: false,
+            isCandidatePlanned: false,
+            ref closestDistance,
+            ref marker,
+            ref isPeriapsis,
+            ref isPlanned,
+            ref markerWorldPosition
+        );
+
+        return marker != null;
+    }
+
+    void ConsiderPeApMarkerPick(
+        Camera camera,
+        UnityEngine.Vector2 mousePosition,
+        TextMesh candidate,
+        bool isCandidatePeriapsis,
+        bool isCandidatePlanned,
+        ref float closestDistance,
+        ref TextMesh marker,
+        ref bool isPeriapsis,
+        ref bool isPlanned,
+        ref UnityEngine.Vector3 markerWorldPosition
+    )
+    {
+        if (!IsMarkerVisible(candidate) || camera == null)
+        {
+            return;
+        }
+
+        Transform anchor = GetMarkerAnchor(candidate);
+
+        if (anchor == null || IsOverlayAnchorHiddenByGlobes(camera, anchor.position))
+        {
+            return;
+        }
+
+        if (
+            !OrbitEventBadge.ContainsScreenPoint(
+                camera,
+                anchor,
+                mousePosition,
+                out float distance
+            )
+        )
+        {
+            return;
+        }
+
+        if (distance >= closestDistance)
+        {
+            return;
+        }
+
+        closestDistance = distance;
+        marker = candidate;
+        isPeriapsis = isCandidatePeriapsis;
+        isPlanned = isCandidatePlanned;
+        markerWorldPosition = anchor.position;
+    }
+
+    void ResolvePeApHoverData(
+        bool isPeriapsis,
+        bool isPlanned,
+        out double altitude,
+        out double time
+    )
+    {
+        if (isPlanned)
+        {
+            altitude = isPeriapsis ?
+                cachedPlannedPeriapsisAltitude :
+                cachedPlannedApoapsisAltitude;
+            time = double.NaN;
+            return;
+        }
+
+        altitude = isPeriapsis ? cachedPeriapsisAltitude : cachedApoapsisAltitude;
+        time = isPeriapsis ? cachedPeriapsisTime : cachedApoapsisTime;
+    }
+
     bool TryFindClosestPredictionPoint(
+        Camera camera,
         UnityEngine.Vector2 mousePosition,
         float pickRadiusPixels,
         out UnityEngine.Vector3 closestWorldPosition,
@@ -1139,26 +1476,47 @@ public class OrbitPreviewView : MonoBehaviour
     )
     {
         bool foundPoint = false;
-        float closestDistance = pickRadiusPixels;
         closestWorldPosition = UnityEngine.Vector3.zero;
         closestTime = 0.0;
 
+        if (camera == null || hoverPredictionWorldPoints.Length < 2)
+        {
+            return false;
+        }
+
+        float pickRadiusSquared = pickRadiusPixels * pickRadiusPixels;
+        float closestDistanceSquared = pickRadiusSquared;
+        UnityEngine.Vector3 previousScreen =
+            camera.WorldToScreenPoint(hoverPredictionWorldPoints[0]);
+
         for (int i = 1; i < hoverPredictionWorldPoints.Length; i++)
         {
-            Vector3 screenA =
-                Camera.main.WorldToScreenPoint(hoverPredictionWorldPoints[i - 1]);
-            Vector3 screenB =
-                Camera.main.WorldToScreenPoint(hoverPredictionWorldPoints[i]);
+            UnityEngine.Vector3 nextScreen =
+                camera.WorldToScreenPoint(hoverPredictionWorldPoints[i]);
+            UnityEngine.Vector3 screenA = previousScreen;
+            previousScreen = nextScreen;
 
-            if (screenA.z < 0 || screenB.z < 0)
+            if (screenA.z < 0f || nextScreen.z < 0f)
             {
                 continue;
             }
 
-            UnityEngine.Vector2 pointA =
-                new UnityEngine.Vector2(screenA.x, screenA.y);
-            UnityEngine.Vector2 pointB =
-                new UnityEngine.Vector2(screenB.x, screenB.y);
+            UnityEngine.Vector2 pointA = new UnityEngine.Vector2(screenA.x, screenA.y);
+            UnityEngine.Vector2 pointB = new UnityEngine.Vector2(nextScreen.x, nextScreen.y);
+            float minX = (pointA.x < pointB.x ? pointA.x : pointB.x) - pickRadiusPixels;
+            float maxX = (pointA.x > pointB.x ? pointA.x : pointB.x) + pickRadiusPixels;
+            if (mousePosition.x < minX || mousePosition.x > maxX)
+            {
+                continue;
+            }
+
+            float minY = (pointA.y < pointB.y ? pointA.y : pointB.y) - pickRadiusPixels;
+            float maxY = (pointA.y > pointB.y ? pointA.y : pointB.y) + pickRadiusPixels;
+            if (mousePosition.y < minY || mousePosition.y > maxY)
+            {
+                continue;
+            }
+
             UnityEngine.Vector2 segment = pointB - pointA;
             float segmentLengthSquared = segment.sqrMagnitude;
 
@@ -1167,31 +1525,37 @@ public class OrbitPreviewView : MonoBehaviour
                 continue;
             }
 
-            float segmentT = Mathf.Clamp01(
-                UnityEngine.Vector2.Dot(mousePosition - pointA, segment) /
-                segmentLengthSquared
-            );
-            UnityEngine.Vector2 closestScreenPoint =
-                pointA + segment * segmentT;
-            float distance = UnityEngine.Vector2.Distance(
-                mousePosition,
-                closestScreenPoint
-            );
-
-            if (distance < closestDistance)
+            float segmentT = UnityEngine.Vector2.Dot(mousePosition - pointA, segment) /
+                segmentLengthSquared;
+            if (segmentT < 0f)
             {
-                closestDistance = distance;
+                segmentT = 0f;
+            }
+            else if (segmentT > 1f)
+            {
+                segmentT = 1f;
+            }
+
+            UnityEngine.Vector2 closestScreenPoint = pointA + segment * segmentT;
+            UnityEngine.Vector2 delta = mousePosition - closestScreenPoint;
+            float distanceSquared = delta.sqrMagnitude;
+
+            if (distanceSquared < closestDistanceSquared)
+            {
+                closestDistanceSquared = distanceSquared;
                 foundPoint = true;
                 closestWorldPosition = UnityEngine.Vector3.Lerp(
                     hoverPredictionWorldPoints[i - 1],
                     hoverPredictionWorldPoints[i],
                     segmentT
                 );
-                closestTime = Mathf.Lerp(
-                    (float)hoverPredictionTimes[i - 1],
-                    (float)hoverPredictionTimes[i],
-                    segmentT
-                );
+                if (i < hoverPredictionTimes.Length)
+                {
+                    closestTime =
+                        hoverPredictionTimes[i - 1] +
+                        (hoverPredictionTimes[i] - hoverPredictionTimes[i - 1]) *
+                        segmentT;
+                }
             }
         }
 
@@ -1199,12 +1563,18 @@ public class OrbitPreviewView : MonoBehaviour
     }
 
     bool IsMouseNearWorldPoint(
+        Camera camera,
         UnityEngine.Vector2 mousePosition,
         UnityEngine.Vector3 worldPosition,
         float pickRadiusPixels
     )
     {
-        UnityEngine.Vector3 screenPosition = Camera.main.WorldToScreenPoint(worldPosition);
+        if (camera == null)
+        {
+            return false;
+        }
+
+        UnityEngine.Vector3 screenPosition = camera.WorldToScreenPoint(worldPosition);
 
         if (screenPosition.z < 0)
         {
@@ -1219,35 +1589,25 @@ public class OrbitPreviewView : MonoBehaviour
 
     void UpdateManeuverNodePoint()
     {
-        if (
-            runner == null ||
-            !runner.HasManeuverNode() ||
-            maneuverNodePoint == null ||
-            hoverPredictionWorldPoints.Length == 0
-        )
+        if (maneuverNodePoint != null)
         {
-            if (maneuverNodePoint != null)
-            {
-                maneuverNodePoint.SetActive(false);
-            }
-
-            HideBurnStartMarker();
-            HideManeuverHandleLines();
-            HideManeuverNodeLabels();
-            return;
+            maneuverNodePoint.SetActive(false);
         }
 
-        maneuverNodeWorldPosition = ToWorldPosition(
-            runner.GetManeuverNodePosition()
-        );
-        maneuverNodePoint.SetActive(true);
-        maneuverNodePoint.transform.position = maneuverNodeWorldPosition;
-        UpdateManeuverHandleLines();
-        UpdateManeuverNodeLabels();
+        HideBurnStartMarker();
+        HideManeuverHandleLines();
+        HideManeuverNodeLabels();
+        isDraggingManeuverNode = false;
     }
 
     void UpdateBurnStartMarker()
     {
+        if (!ShowManeuverNodeOverlay)
+        {
+            HideBurnStartMarker();
+            return;
+        }
+
         if (
             runner == null ||
             !runner.HasManeuverNode() ||
@@ -1473,6 +1833,7 @@ public class OrbitPreviewView : MonoBehaviour
     void HideOrbitHoverPoint()
     {
         hasHoveredOrbitPoint = false;
+        hasHoveredPeApMarker = false;
         showWarpContextMenu = false;
         isDraggingManeuverNode = false;
 
@@ -1491,89 +1852,133 @@ public class OrbitPreviewView : MonoBehaviour
 
         DrawOrbitLegend();
 
-        if (!hasHoveredOrbitPoint || runner == null)
+        if ((!hasHoveredOrbitPoint && !hasHoveredPeApMarker) || runner == null)
         {
             return;
         }
 
-        UnityEngine.Vector2 guiPosition =
-            showWarpContextMenu ? warpMenuGuiPosition : hoverGuiPosition;
+        EnsureHoverTooltipStyles();
         double displayTime =
             showWarpContextMenu ? warpMenuTime : hoveredOrbitPointTime;
-        GUILayout.BeginArea(
-            new Rect(guiPosition.x, guiPosition.y, 280, showWarpContextMenu ? 280 : 72)
+        string tooltipText = hasHoveredPeApMarker ?
+            BuildPeApHoverTooltip() :
+            BuildHoverTooltip(displayTime);
+        GUIContent tooltipContent = new GUIContent(tooltipText);
+        UnityEngine.Vector2 textSize = hoverTooltipLabelStyle.CalcSize(tooltipContent);
+        const float padX = 14.0f;
+        const float padY = 10.0f;
+        const float warpButtonHeight = 24.0f;
+        float tooltipWidth = Mathf.Ceil(textSize.x) + padX * 2.0f;
+        float tooltipHeight = Mathf.Ceil(textSize.y) + padY * 2.0f;
+
+        if (showWarpContextMenu)
+        {
+            tooltipWidth = Mathf.Max(tooltipWidth, 168.0f);
+            tooltipHeight += warpButtonHeight + 8.0f;
+        }
+
+        UnityEngine.Vector2 guiPosition = showWarpContextMenu ?
+            warpMenuGuiPosition :
+            ResolveHoverWindowGuiPosition(tooltipWidth, tooltipHeight);
+        Rect windowRect = new Rect(
+            guiPosition.x,
+            guiPosition.y,
+            tooltipWidth,
+            tooltipHeight
         );
-        GUILayout.Label(BuildHoverTooltip(displayTime));
+        GUI.Box(windowRect, GUIContent.none, hoverTooltipBoxStyle);
 
         if (!showWarpContextMenu)
         {
-            GUILayout.EndArea();
+            GUI.Label(windowRect, tooltipContent, hoverTooltipLabelStyle);
             return;
         }
 
-        if (GUILayout.Button(T("Warp here")))
+        Rect labelRect = new Rect(
+            windowRect.x,
+            windowRect.y,
+            windowRect.width,
+            windowRect.height - warpButtonHeight - 10.0f
+        );
+        GUI.Label(labelRect, tooltipContent, hoverTooltipLabelStyle);
+        Rect buttonRect = new Rect(
+            windowRect.x + 10.0f,
+            windowRect.yMax - warpButtonHeight - 8.0f,
+            windowRect.width - 20.0f,
+            warpButtonHeight
+        );
+
+        if (GUI.Button(buttonRect, T("Warp here")))
         {
             runner.WarpBy(warpMenuTime);
             showWarpContextMenu = false;
             HideOrbitHoverPoint();
         }
-
-        if (runner.HasManeuverNode())
-        {
-            if (GUILayout.Button(T("Warp to maneuver start")))
-            {
-                runner.WarpToManeuverStart();
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-
-            if (GUILayout.Button(T("Auto execute maneuver")))
-            {
-                runner.StartAutoBurn();
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-
-            if (GUILayout.Button(T("Remove maneuver")))
-            {
-                runner.ClearManeuverNode();
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-        }
-        else
-        {
-            if (GUILayout.Button(T("Add maneuver")))
-            {
-                runner.SetManeuverNode(
-                    warpMenuTime,
-                    ToSimulationPosition(warpMenuWorldPosition)
-                );
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-
-            if (GUILayout.Button(T("Add maneuver at Pe")))
-            {
-                runner.SetManeuverNodeAtPeriapsis();
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-
-            if (GUILayout.Button(T("Add maneuver at Ap")))
-            {
-                runner.SetManeuverNodeAtApoapsis();
-                showWarpContextMenu = false;
-                HideOrbitHoverPoint();
-            }
-        }
-
-        GUILayout.EndArea();
     }
 
     string T(string key)
     {
         return Localization.Translate(key);
+    }
+
+    void EnsureHoverTooltipStyles()
+    {
+        if (hoverTooltipBoxStyle == null)
+        {
+            hoverTooltipBoxStyle = new GUIStyle(GUI.skin.box);
+            hoverTooltipBoxStyle.normal.background = MakeHoverTooltipBackground();
+            hoverTooltipBoxStyle.padding = new RectOffset(10, 10, 8, 8);
+        }
+
+        if (hoverTooltipLabelStyle == null)
+        {
+            hoverTooltipLabelStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                wordWrap = false,
+                alignment = TextAnchor.MiddleCenter,
+            };
+            hoverTooltipLabelStyle.normal.textColor = Color.white;
+        }
+
+        hoverTooltipLabelStyle.wordWrap = false;
+        hoverTooltipLabelStyle.alignment = TextAnchor.MiddleCenter;
+        hoverTooltipLabelStyle.padding = new RectOffset(0, 0, 0, 0);
+    }
+
+    static Texture2D MakeHoverTooltipBackground()
+    {
+        Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        Color fill = new Color(0.04f, 0.05f, 0.08f, 0.92f);
+        texture.SetPixels(new[] { fill, fill, fill, fill });
+        texture.Apply();
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.filterMode = FilterMode.Point;
+        texture.hideFlags = HideFlags.HideAndDontSave;
+        return texture;
+    }
+
+    UnityEngine.Vector2 ResolveHoverWindowGuiPosition(float width, float height)
+    {
+        Camera camera = Camera.main;
+
+        if (camera != null)
+        {
+            UnityEngine.Vector3 screenPosition =
+                camera.WorldToScreenPoint(hoveredOrbitPointPosition);
+
+            if (screenPosition.z > 0.0f)
+            {
+                float x = screenPosition.x - width * 0.5f;
+                float y = Screen.height - screenPosition.y - height - 18.0f;
+                x = Mathf.Clamp(x, 8.0f, Mathf.Max(8.0f, Screen.width - width - 8.0f));
+                y = Mathf.Clamp(y, 8.0f, Mathf.Max(8.0f, Screen.height - height - 8.0f));
+                return new UnityEngine.Vector2(x, y);
+            }
+        }
+
+        return hoverGuiPosition;
     }
 
     void UpdateClosestApproachMarker()
@@ -1618,7 +2023,13 @@ public class OrbitPreviewView : MonoBehaviour
             return SphereOfInfluenceEntryPreview.None();
         }
 
-        DrawOrbit(sphereOfInfluenceEntryLineRenderer, preview.pathPoints);
+        string nextPatchLayoutName =
+            preview.targetBodyName == "Sun" ? "Planet" : preview.targetBodyName;
+        DrawOrbit(
+            sphereOfInfluenceEntryLineRenderer,
+            preview.pathPoints,
+            nextPatchLayoutName
+        );
         DrawOrbit(
             moonSphereOfInfluenceOrbitLineRenderer,
             preview.moonOrbitPathPoints
@@ -1644,7 +2055,19 @@ public class OrbitPreviewView : MonoBehaviour
             return "Sun SoI";
         }
 
-        return "Moon SoI";
+        if (targetBodyName == "Moon")
+        {
+            return "Moon SoI";
+        }
+
+        return "Earth SoI";
+    }
+
+    static bool IsSphereOfInfluenceEventName(string eventName)
+    {
+        return eventName == "Moon SoI" ||
+            eventName == "Earth SoI" ||
+            eventName == "Sun SoI";
     }
 
     void HideSphereOfInfluenceEntryPreview()
@@ -1682,7 +2105,10 @@ public class OrbitPreviewView : MonoBehaviour
         ClosestApproachInfo closestApproach =
             runner.GetCachedClosestApproach();
 
-        if (!closestApproach.hasApproach)
+        if (
+            !closestApproach.hasApproach ||
+            closestApproach.targetBodyName == simulation.activePrimaryBodyName
+        )
         {
             closestApproachPoint.SetActive(false);
             HideClosestApproachRendezvousView();
@@ -1828,8 +2254,17 @@ public class OrbitPreviewView : MonoBehaviour
 
     void DrawOrbit(LineRenderer targetLineRenderer, global::SimVector3[] orbitPoints)
     {
+        DrawOrbit(targetLineRenderer, orbitPoints, (string)null);
+    }
+
+    void DrawOrbit(
+        LineRenderer targetLineRenderer,
+        global::SimVector3[] orbitPoints,
+        string layoutBodyName
+    )
+    {
         UnityEngine.Vector3[] unusedBuffer = null;
-        DrawOrbit(targetLineRenderer, orbitPoints, ref unusedBuffer);
+        DrawOrbit(targetLineRenderer, orbitPoints, ref unusedBuffer, layoutBodyName);
     }
 
     void DrawWorldOrbit(LineRenderer targetLineRenderer, UnityEngine.Vector3[] orbitPoints)
@@ -1854,9 +2289,20 @@ public class OrbitPreviewView : MonoBehaviour
         string markerName,
         string markerText,
         Color color,
-        float screenHeightFraction = OrbitMarkerScreenHeightFraction
+        float screenHeightFraction = OrbitMarkerScreenHeightFraction,
+        bool pinBadge = false
     )
     {
+        if (pinBadge)
+        {
+            return CreateOrbitPinBadgeMarker(
+                markerName,
+                markerText,
+                color,
+                screenHeightFraction
+            );
+        }
+
         GameObject markerObject = new GameObject(markerName);
         markerObject.transform.SetParent(transform);
 
@@ -1882,8 +2328,51 @@ public class OrbitPreviewView : MonoBehaviour
             RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(markerRenderer);
         }
 
+        ApplyMapSpaceMarkerLayer(markerObject);
         markerObject.SetActive(false);
 
+        return textMesh;
+    }
+
+    TextMesh CreateOrbitPinBadgeMarker(
+        string markerName,
+        string markerText,
+        Color color,
+        float screenHeightFraction
+    )
+    {
+        GameObject root = new GameObject(markerName);
+        root.transform.SetParent(transform, false);
+
+        OrbitEventBadge badge = root.AddComponent<OrbitEventBadge>();
+        ScreenSpaceBillboardScaler billboardScaler =
+            root.AddComponent<ScreenSpaceBillboardScaler>();
+        billboardScaler.ScreenHeightFraction = screenHeightFraction;
+        billboardScaler.DriveTextMeshCharacterSize = false;
+        badge.Initialize(color, markerText);
+
+        GameObject labelObject = new GameObject("Label");
+        labelObject.transform.SetParent(root.transform, false);
+        labelObject.transform.localPosition = UnityEngine.Vector3.zero;
+
+        TextMesh textMesh = labelObject.AddComponent<TextMesh>();
+        textMesh.text = markerText;
+        textMesh.fontSize = 12;
+        textMesh.characterSize = 0.01f;
+        textMesh.anchor = TextAnchor.MiddleCenter;
+        textMesh.alignment = TextAlignment.Center;
+        textMesh.color = color;
+
+        MeshRenderer labelRenderer = labelObject.GetComponent<MeshRenderer>();
+
+        if (labelRenderer != null)
+        {
+            labelRenderer.enabled = false;
+        }
+
+        ApplyMapSpaceMarkerLayer(root);
+        markerBaseScreenHeightFractions[textMesh] = screenHeightFraction;
+        root.SetActive(false);
         return textMesh;
     }
 
@@ -1898,12 +2387,12 @@ public class OrbitPreviewView : MonoBehaviour
         SetMarkerHighlight(
             periapsisMarker,
             nextEventName == "Pe",
-            EventColorPeAp
+            EventColorPe
         );
         SetMarkerHighlight(
             apoapsisMarker,
             nextEventName == "Ap",
-            EventColorPeAp
+            EventColorAp
         );
         SetMarkerHighlight(
             plannedPeriapsisMarker,
@@ -1927,7 +2416,7 @@ public class OrbitPreviewView : MonoBehaviour
         );
         SetMarkerHighlight(
             sphereOfInfluenceEntryMarker,
-            nextEventName == "Moon SoI" || nextEventName == "Sun SoI",
+            IsSphereOfInfluenceEventName(nextEventName),
             EventColorSoI
         );
         SetMarkerHighlight(
@@ -1981,7 +2470,7 @@ public class OrbitPreviewView : MonoBehaviour
         SetPointHighlight(
             sphereOfInfluenceEntryPointRenderer,
             sphereOfInfluenceEntryPoint != null && sphereOfInfluenceEntryPoint.activeSelf &&
-                (nextEventName == "Moon SoI" || nextEventName == "Sun SoI"),
+                IsSphereOfInfluenceEventName(nextEventName),
             new Color(1.0f, 0.85f, 0.0f),
             sphereOfInfluenceEntryPointSize
         );
@@ -2001,8 +2490,8 @@ public class OrbitPreviewView : MonoBehaviour
 
     void ResetEventMarkerHighlights()
     {
-        SetMarkerHighlight(periapsisMarker, false, EventColorPeAp);
-        SetMarkerHighlight(apoapsisMarker, false, EventColorPeAp);
+        SetMarkerHighlight(periapsisMarker, false, EventColorPe);
+        SetMarkerHighlight(apoapsisMarker, false, EventColorAp);
         SetMarkerHighlight(plannedPeriapsisMarker, false, EventColorPlanned);
         SetMarkerHighlight(plannedApoapsisMarker, false, EventColorPlanned);
         SetMarkerHighlight(closestApproachDistanceMarker, false, EventColorCA);
@@ -2023,11 +2512,21 @@ public class OrbitPreviewView : MonoBehaviour
             return;
         }
 
-        marker.color = highlighted ? Color.white : baseColor;
-        marker.fontSize = highlighted ? 38 : 32;
+        OrbitEventBadge badge = OrbitEventBadge.FindOn(marker);
 
+        if (badge != null)
+        {
+            badge.SetHighlighted(highlighted);
+        }
+        else
+        {
+            marker.color = highlighted ? Color.white : baseColor;
+            marker.fontSize = highlighted ? 38 : 32;
+        }
+
+        Transform anchor = GetMarkerAnchor(marker);
         ScreenSpaceBillboardScaler billboardScaler =
-            marker.GetComponent<ScreenSpaceBillboardScaler>();
+            anchor.GetComponent<ScreenSpaceBillboardScaler>();
 
         if (billboardScaler != null)
         {
@@ -2079,6 +2578,7 @@ public class OrbitPreviewView : MonoBehaviour
             closestApproachPoint.GetComponent<Renderer>();
         closestApproachPointRenderer.material.color = Color.white;
         RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(closestApproachPointRenderer);
+        ApplyMapSpaceMarkerLayer(closestApproachPoint);
         closestApproachPoint.SetActive(false);
     }
 
@@ -2098,6 +2598,7 @@ public class OrbitPreviewView : MonoBehaviour
     void UpdateBurnPreviewPathOverlay()
     {
         if (
+            !ShowManeuverNodeOverlay ||
             runner == null ||
             burnPreviewPathLineRenderer == null ||
             !runner.HasBurnDiagnosticOverlay()
@@ -2126,76 +2627,12 @@ public class OrbitPreviewView : MonoBehaviour
 
     void UpdateDescentPreviewPathOverlay()
     {
-        if (simulation == null || descentPreviewPathLineRenderer == null)
-        {
-            return;
-        }
-
-        if (!simulation.ShouldShowDescentPreview())
-        {
-            descentPreviewPathLineRenderer.positionCount = 0;
-            return;
-        }
-
-        bool useAtmosphericSas =
-            runner != null &&
-            runner.ShipOrientationMode != ShipOrientationMode.Manual;
-        global::SimVector3[] previewPath = simulation.SampleDescentPreviewWorldPath(
-            useAtmosphericSas,
-            3600.0,
-            hoverPredictionDt,
-            hoverPredictionStepCount
-        );
-
-        if (previewPath.Length < 2)
-        {
-            descentPreviewPathLineRenderer.positionCount = 0;
-            return;
-        }
-
-        UnityEngine.Vector3[] worldPoints = new UnityEngine.Vector3[previewPath.Length];
-
-        for (int i = 0; i < previewPath.Length; i++)
-        {
-            worldPoints[i] = ToWorldPosition(previewPath[i]);
-        }
-
-        descentPreviewPathLineRenderer.enabled = true;
-        descentPreviewPathLineRenderer.positionCount = worldPoints.Length;
-        descentPreviewPathLineRenderer.SetPositions(worldPoints);
+        ClearLineRenderer(descentPreviewPathLineRenderer);
     }
 
     void UpdateDescentImpactMarker()
     {
-        if (simulation == null || descentImpactMarker == null)
-        {
-            return;
-        }
-
-        if (
-            !simulation.ShouldShowDescentPreview() ||
-            !simulation.TryGetDescentImpactPoint(out global::SimVector3 impactPoint)
-        )
-        {
-            HideMarker(descentImpactMarker);
-            return;
-        }
-
-        Body activePrimary = simulation.GetActivePrimaryBody();
-        double impactAltitude = activePrimary == null ?
-            double.NaN :
-            activePrimary.position
-                .Subtract(impactPoint)
-                .Length() -
-            activePrimary.radius;
-
-        ShowEventMarker(
-            descentImpactMarker,
-            ToWorldPosition(impactPoint),
-            "Impact",
-            impactAltitude,
-            double.NaN
-        );
+        HideMarker(descentImpactMarker);
     }
 
     LineRenderer CreateBurnPreviewPathLine()
@@ -2246,6 +2683,7 @@ public class OrbitPreviewView : MonoBehaviour
         sphereOfInfluenceEntryPointRenderer.material.color =
             new Color(1.0f, 0.85f, 0.0f);
         RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(sphereOfInfluenceEntryPointRenderer);
+        ApplyMapSpaceMarkerLayer(sphereOfInfluenceEntryPoint);
         sphereOfInfluenceEntryPoint.SetActive(false);
     }
 
@@ -2266,6 +2704,7 @@ public class OrbitPreviewView : MonoBehaviour
         orbitHoverPointRenderer = orbitHoverPoint.GetComponent<Renderer>();
         orbitHoverPointRenderer.material.color = new Color(1.0f, 1.0f, 0.15f);
         RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(orbitHoverPointRenderer);
+        ApplyMapSpaceMarkerLayer(orbitHoverPoint);
         orbitHoverPoint.SetActive(false);
     }
 
@@ -2285,6 +2724,8 @@ public class OrbitPreviewView : MonoBehaviour
 
         maneuverNodePointRenderer = maneuverNodePoint.GetComponent<Renderer>();
         maneuverNodePointRenderer.material.color = new Color(1.0f, 0.85f, 0.0f);
+        RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(maneuverNodePointRenderer);
+        ApplyMapSpaceMarkerLayer(maneuverNodePoint);
         maneuverNodePoint.SetActive(false);
     }
 
@@ -2304,6 +2745,8 @@ public class OrbitPreviewView : MonoBehaviour
 
         burnStartPointRenderer = burnStartPoint.GetComponent<Renderer>();
         burnStartPointRenderer.material.color = new Color(1.0f, 0.55f, 0.15f);
+        RuntimeMaterialFactory.ApplyOrbitOverlayRenderer(burnStartPointRenderer);
+        ApplyMapSpaceMarkerLayer(burnStartPoint);
         burnStartPoint.SetActive(false);
     }
 
@@ -2336,14 +2779,17 @@ public class OrbitPreviewView : MonoBehaviour
         );
     }
 
-    void UpdateOrbitMarkers(
+    void ApplyMapSpaceMarkerLayer(GameObject markerObject)
+    {
+        OrbitLineVisualUtility.ApplyOrbitOverlayLayer(markerObject);
+    }
+
+    void UpdateOrbitApsideMarkers(
         TextMesh periapsisText,
         TextMesh apoapsisText,
-        global::SimVector3[] orbitPoints,
-        global::SimVector3 primaryPosition,
-        double primaryRadius,
-        double truePeriapsisAltitude,
-        double trueApoapsisAltitude,
+        Body primaryBody,
+        global::SimVector3 orbitingPosition,
+        global::SimVector3 orbitingVelocity,
         double timeToPeriapsis = double.NaN,
         double timeToApoapsis = double.NaN,
         bool stretchHeliocentric = false
@@ -2351,88 +2797,82 @@ public class OrbitPreviewView : MonoBehaviour
     {
         bool isPlannedMarker = periapsisText == plannedPeriapsisMarker;
 
-        if (orbitPoints.Length == 0)
+        if (primaryBody == null)
         {
             HideMarkers(periapsisText, apoapsisText);
             ClearOrbitMarkerCache(isPlannedMarker);
             return;
         }
 
-        double periapsisRadius = primaryRadius + truePeriapsisAltitude;
-        double apoapsisRadius = primaryRadius + trueApoapsisAltitude;
+        bool found = OrbitalMechanics.TryGetOrbitApsides(
+            primaryBody,
+            orbitingPosition,
+            orbitingVelocity,
+            out global::SimVector3 periapsisPosition,
+            out double periapsisAltitude,
+            out bool hasPeriapsis,
+            out global::SimVector3 apoapsisPosition,
+            out double apoapsisAltitude,
+            out bool hasApoapsis
+        );
 
-        if (
-            IsValidOrbitMarkerAltitude(truePeriapsisAltitude) &&
-            IsValidOrbitMarkerAltitude(trueApoapsisAltitude) &&
-            IsNearlyCircular(periapsisRadius, apoapsisRadius)
-        )
+        if (!found)
         {
             HideMarkers(periapsisText, apoapsisText);
             ClearOrbitMarkerCache(isPlannedMarker);
             return;
         }
 
-        UpdateSingleOrbitMarker(
+        UpdateSingleOrbitApsideMarker(
             periapsisText,
-            orbitPoints,
-            primaryPosition,
-            primaryRadius,
-            truePeriapsisAltitude,
+            periapsisPosition,
+            periapsisAltitude,
+            hasPeriapsis,
             "Pe",
             timeToPeriapsis,
             isPlannedMarker,
             isPeriapsis: true,
+            primaryBody,
             stretchHeliocentric
         );
-        UpdateSingleOrbitMarker(
+        UpdateSingleOrbitApsideMarker(
             apoapsisText,
-            orbitPoints,
-            primaryPosition,
-            primaryRadius,
-            trueApoapsisAltitude,
+            apoapsisPosition,
+            apoapsisAltitude,
+            hasApoapsis,
             "Ap",
             timeToApoapsis,
             isPlannedMarker,
             isPeriapsis: false,
+            primaryBody,
             stretchHeliocentric
         );
     }
 
-    void UpdateSingleOrbitMarker(
+    void UpdateSingleOrbitApsideMarker(
         TextMesh marker,
-        global::SimVector3[] orbitPoints,
-        global::SimVector3 primaryPosition,
-        double primaryRadius,
+        global::SimVector3 keplerPosition,
         double trueAltitude,
+        bool hasApside,
         string markerLabel,
         double markerTime,
         bool isPlannedMarker,
         bool isPeriapsis,
-        bool stretchHeliocentric = false
+        Body primaryBody,
+        bool stretchHeliocentric
     )
     {
-        if (!IsValidOrbitMarkerAltitude(trueAltitude))
+        if (!hasApside || !IsValidOrbitMarkerAltitude(trueAltitude))
         {
-            marker.gameObject.SetActive(false);
+            SetMarkerVisible(marker, false);
             ClearOrbitMarkerCacheEntry(isPlannedMarker, isPeriapsis);
             return;
         }
 
-        int markerIndex = FindOrbitMarkerIndexForAltitude(
-            orbitPoints,
-            primaryPosition,
-            primaryRadius,
-            trueAltitude
+        global::SimVector3 markerSimulationPosition = LiftApsideToBodySurface(
+            keplerPosition,
+            primaryBody
         );
-
-        if (markerIndex < 0)
-        {
-            marker.gameObject.SetActive(false);
-            ClearOrbitMarkerCacheEntry(isPlannedMarker, isPeriapsis);
-            return;
-        }
-
-        global::SimVector3 markerSimulationPosition = orbitPoints[markerIndex];
 
         if (
             runner != null &&
@@ -2440,7 +2880,7 @@ public class OrbitPreviewView : MonoBehaviour
             IsNearManeuverNode(markerSimulationPosition)
         )
         {
-            marker.gameObject.SetActive(false);
+            SetMarkerVisible(marker, false);
             ClearOrbitMarkerCacheEntry(isPlannedMarker, isPeriapsis);
             return;
         }
@@ -2471,6 +2911,29 @@ public class OrbitPreviewView : MonoBehaviour
             trueAltitude,
             markerTime,
             stretchHeliocentric
+        );
+    }
+
+    static global::SimVector3 LiftApsideToBodySurface(
+        global::SimVector3 apsidePosition,
+        Body primaryBody
+    )
+    {
+        if (primaryBody == null || primaryBody.radius <= 0.0)
+        {
+            return apsidePosition;
+        }
+
+        global::SimVector3 relative = apsidePosition.Subtract(primaryBody.position);
+        double radius = relative.Length();
+
+        if (radius >= primaryBody.radius || radius <= 0.0)
+        {
+            return apsidePosition;
+        }
+
+        return primaryBody.position.Add(
+            relative.Normalize().Multiply(primaryBody.radius)
         );
     }
 
@@ -2530,39 +2993,6 @@ public class OrbitPreviewView : MonoBehaviour
         {
             hasCachedApoapsisMarker = false;
         }
-    }
-
-    static int FindOrbitMarkerIndexForAltitude(
-        global::SimVector3[] orbitPoints,
-        global::SimVector3 primaryPosition,
-        double primaryRadius,
-        double targetAltitude
-    )
-    {
-        double targetRadius = primaryRadius + targetAltitude;
-        int bestIndex = -1;
-        double bestRadiusError = double.PositiveInfinity;
-
-        for (int i = 0; i < orbitPoints.Length; i++)
-        {
-            double distance = orbitPoints[i].Subtract(primaryPosition).Length();
-            double altitude = distance - primaryRadius;
-
-            if (altitude <= 0.0)
-            {
-                continue;
-            }
-
-            double radiusError = Math.Abs(distance - targetRadius);
-
-            if (radiusError < bestRadiusError)
-            {
-                bestRadiusError = radiusError;
-                bestIndex = i;
-            }
-        }
-
-        return bestIndex;
     }
 
     static bool IsValidOrbitMarkerAltitude(double altitudeAboveSphereMeters)
@@ -2628,15 +3058,6 @@ public class OrbitPreviewView : MonoBehaviour
         hasCachedApoapsisMarker = false;
     }
 
-    bool IsNearlyCircular(double periapsisDistance, double apoapsisDistance)
-    {
-        double averageDistance = (periapsisDistance + apoapsisDistance) * 0.5;
-        double minimumVisibleSpread =
-            Math.Max(0.01, averageDistance * nearCircularMarkerEccentricity);
-        return Math.Abs(apoapsisDistance - periapsisDistance) <=
-            minimumVisibleSpread;
-    }
-
     bool TryShowOrbitMarker(
         TextMesh marker,
         UnityEngine.Vector3 worldPosition,
@@ -2652,7 +3073,7 @@ public class OrbitPreviewView : MonoBehaviour
 
         if (!IsValidOrbitMarkerAltitude(altitudeAboveSphereMeters))
         {
-            marker.gameObject.SetActive(false);
+            SetMarkerVisible(marker, false);
             return false;
         }
 
@@ -2711,22 +3132,28 @@ public class OrbitPreviewView : MonoBehaviour
         bool translateTitle = true
     )
     {
-        marker.gameObject.SetActive(true);
-        string markerText = BuildEventMarkerText(
-            markerTitle,
-            markerValue,
-            markerTime,
-            extraLine,
-            translateTitle
-        );
+        SetMarkerVisible(marker, true);
+        bool pinBadge = IsPinBadgeMarker(marker);
+        string markerText = pinBadge ?
+            markerTitle :
+            BuildEventMarkerText(
+                markerTitle,
+                markerValue,
+                markerTime,
+                extraLine,
+                translateTitle
+            );
 
         if (marker.text != markerText)
         {
             marker.text = markerText;
         }
 
-        marker.transform.position = ApplyMapOrbitMarkerDisplayPosition(
-            worldPosition + new UnityEngine.Vector3(0.0f, eventLabelOffsetY, 0.0f)
+        SetMarkerWorldPosition(
+            marker,
+            ApplyMapOrbitMarkerDisplayPosition(
+                worldPosition + GetOrbitMarkerDisplayOffset(marker)
+            )
         );
     }
 
@@ -2736,15 +3163,16 @@ public class OrbitPreviewView : MonoBehaviour
 
         if (facingCamera == null)
         {
-            return worldPosition;
+            return LiftMarkerOutOfOccluder(worldPosition, null);
         }
 
-        UnityEngine.Vector3 toCamera = facingCamera.transform.position - worldPosition;
+        UnityEngine.Vector3 lifted = LiftMarkerOutOfOccluder(worldPosition, facingCamera);
+        UnityEngine.Vector3 toCamera = facingCamera.transform.position - lifted;
         float distanceToCamera = toCamera.magnitude;
 
         if (distanceToCamera <= 1e-4f)
         {
-            return worldPosition;
+            return lifted;
         }
 
         float depthBias = OrbitLineScreenSpaceWidth.ConvertPixelWidthToWorld(
@@ -2752,19 +3180,267 @@ public class OrbitPreviewView : MonoBehaviour
             distanceToCamera,
             14.0f
         );
-        return worldPosition + toCamera.normalized * depthBias;
+        return lifted + toCamera.normalized * depthBias;
+    }
+
+    UnityEngine.Vector3 LiftMarkerOutOfOccluder(
+        UnityEngine.Vector3 worldPosition,
+        Camera facingCamera
+    )
+    {
+        if (!TryGetMarkerOccluderSphere(out UnityEngine.Vector3 center, out float radius))
+        {
+            return worldPosition;
+        }
+
+        float minRadius = radius * 1.012f;
+        UnityEngine.Vector3 fromCenter = worldPosition - center;
+        float distance = fromCenter.magnitude;
+
+        if (distance >= minRadius)
+        {
+            return worldPosition;
+        }
+
+        UnityEngine.Vector3 radial;
+        if (distance > 1e-4f)
+        {
+            radial = fromCenter / distance;
+        }
+        else if (facingCamera != null)
+        {
+            radial = (facingCamera.transform.position - center).normalized;
+        }
+        else
+        {
+            radial = UnityEngine.Vector3.up;
+        }
+
+        return center + radial * minRadius;
+    }
+
+    bool TryGetMarkerOccluderSphere(out UnityEngine.Vector3 center, out float radius)
+    {
+        center = UnityEngine.Vector3.zero;
+        radius = 0.0f;
+
+        if (runner == null || string.IsNullOrEmpty(cachedOrbitOccluderBodyName))
+        {
+            return false;
+        }
+
+        if (
+            runner.TryGetBodyVisualTransform(cachedOrbitOccluderBodyName, out Transform visual) &&
+            WorldVisualBridge.TryGetCelestialOcclusionSphere(visual, out center, out radius)
+        )
+        {
+            return radius > 0.0f;
+        }
+
+        Body body = simulation != null ?
+            simulation.GetBodyByName(cachedOrbitOccluderBodyName) :
+            null;
+
+        if (body == null)
+        {
+            return false;
+        }
+
+        center = runner.ToWorldPosition(body.position);
+        radius = (float)(body.radius * runner.GetVisualPositionScale());
+        return radius > 0.0f;
+    }
+
+    bool IsOverlayAnchorHiddenByGlobes(
+        Camera camera,
+        UnityEngine.Vector3 worldPosition
+    )
+    {
+        if (camera == null || runner == null)
+        {
+            return false;
+        }
+
+        return
+            IsOverlayAnchorHiddenByBody(camera, worldPosition, "Planet") ||
+            IsOverlayAnchorHiddenByBody(camera, worldPosition, "Moon");
+    }
+
+    bool IsOverlayAnchorHiddenByBody(
+        Camera camera,
+        UnityEngine.Vector3 worldPosition,
+        string bodyName
+    )
+    {
+        if (
+            !runner.TryGetBodyVisualTransform(bodyName, out Transform visual) ||
+            visual == null ||
+            !WorldVisualBridge.TryGetCelestialOcclusionSphere(
+                visual,
+                out UnityEngine.Vector3 center,
+                out float radius
+            ) ||
+            radius <= 0.0f
+        )
+        {
+            return false;
+        }
+
+        return !WorldVisualBridge.IsMapMarkerVisibleFromCamera(
+            camera,
+            worldPosition,
+            center,
+            radius,
+            hasPlanetSphere: true
+        );
+    }
+
+    void ApplyOrbitLineOccluder(bool enabled)
+    {
+        if (!enabled || simulation == null || runner == null)
+        {
+            ClearOrbitLineOccluders();
+            return;
+        }
+
+        bool planetOccluder = TryApplyOrbitOccluderSlot(0, "Planet");
+        if (planetOccluder)
+        {
+            if (!TryApplyOrbitOccluderSlot(1, "Moon"))
+            {
+                Shader.SetGlobalFloat("_SPOrbitOccluder2Enabled", 0.0f);
+            }
+
+            return;
+        }
+
+        if (TryApplyOrbitOccluderSlot(0, "Moon"))
+        {
+            Shader.SetGlobalFloat("_SPOrbitOccluder2Enabled", 0.0f);
+            return;
+        }
+
+        ClearOrbitLineOccluders();
+    }
+
+    bool TryApplyOrbitOccluderSlot(int slot, string bodyName)
+    {
+        if (string.IsNullOrEmpty(bodyName) || runner == null)
+        {
+            return false;
+        }
+
+        Vector3 center;
+        float radius;
+        if (runner.TryGetBodyVisualTransform(bodyName, out Transform visual) && visual != null)
+        {
+            if (WorldVisualBridge.TryGetCelestialOcclusionSphere(visual, out center, out radius) &&
+                radius > 0.0f)
+            {
+                ApplyOrbitOccluderSlot(slot, center, radius);
+                return true;
+            }
+
+            if (WorldVisualBridge.TryGetMapModePlanetOcclusionSphere(visual, out center, out radius) &&
+                radius > 0.0f)
+            {
+                ApplyOrbitOccluderSlot(slot, center, radius);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static void ApplyOrbitOccluderSlot(int slot, Vector3 center, float radius)
+    {
+        float safeRadius = Mathf.Max(radius, 0.0f);
+        if (slot == 0)
+        {
+            Shader.SetGlobalFloat("_SPOrbitOccluderEnabled", 1.0f);
+            Shader.SetGlobalVector("_SPOrbitOccluderCenter", center);
+            Shader.SetGlobalFloat("_SPOrbitOccluderRadius", safeRadius);
+            return;
+        }
+
+        Shader.SetGlobalFloat("_SPOrbitOccluder2Enabled", 1.0f);
+        Shader.SetGlobalVector("_SPOrbitOccluder2Center", center);
+        Shader.SetGlobalFloat("_SPOrbitOccluder2Radius", safeRadius);
+    }
+
+    static void ClearOrbitLineOccluders()
+    {
+        Shader.SetGlobalFloat("_SPOrbitOccluderEnabled", 0.0f);
+        Shader.SetGlobalFloat("_SPOrbitOccluder2Enabled", 0.0f);
+    }
+
+    void ApplyPinBadgeScreenSizes()
+    {
+        Camera camera = Camera.main;
+
+        if (camera == null)
+        {
+            return;
+        }
+
+        ApplyPinBadgeScreenSize(periapsisMarker, camera);
+        ApplyPinBadgeScreenSize(apoapsisMarker, camera);
+        ApplyPinBadgeScreenSize(plannedPeriapsisMarker, camera);
+        ApplyPinBadgeScreenSize(plannedApoapsisMarker, camera);
+    }
+
+    void ApplyPinBadgeScreenSize(TextMesh marker, Camera camera)
+    {
+        if (!IsPinBadgeMarker(marker) || !IsMarkerVisible(marker))
+        {
+            return;
+        }
+
+        Transform anchor = GetMarkerAnchor(marker);
+        float distance = UnityEngine.Vector3.Distance(
+            camera.transform.position,
+            anchor.position
+        );
+        float size = ScreenSpaceBillboardScaler.ComputeBillboardWorldSize(
+            camera,
+            distance,
+            OrbitPinBadgeScreenHeightFraction
+        );
+        anchor.localScale = new UnityEngine.Vector3(size, size, 1.0f);
+        anchor.rotation = camera.transform.rotation;
+        SetBadgeRenderersEnabled(anchor, true);
+    }
+
+    static void SetBadgeRenderersEnabled(Transform anchor, bool enabled)
+    {
+        Renderer[] renderers = anchor.GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null || renderer.GetComponent<TextMesh>() != null)
+            {
+                continue;
+            }
+
+            renderer.enabled = enabled;
+        }
     }
 
     void ShowTextMarker(TextMesh marker, UnityEngine.Vector3 worldPosition, string text)
     {
-        marker.gameObject.SetActive(true);
+        SetMarkerVisible(marker, true);
 
         if (marker.text != text)
         {
             marker.text = text;
         }
 
-        marker.transform.position = ApplyMapOrbitMarkerDisplayPosition(worldPosition);
+        SetMarkerWorldPosition(
+            marker,
+            ApplyMapOrbitMarkerDisplayPosition(worldPosition)
+        );
     }
 
     UnityEngine.Vector3 ToWorldPosition(global::SimVector3 simulationPosition)
@@ -2811,6 +3487,12 @@ public class OrbitPreviewView : MonoBehaviour
             return false;
         }
 
+        if (simulation.IsVesselBodyName(bodyName))
+        {
+            Body primaryBody = simulation.GetActivePrimaryBody();
+            return primaryBody != null && primaryBody.name == "Sun";
+        }
+
         Body parentBody = simulation.TryGetOrbitParentBody(bodyName);
         return parentBody != null && parentBody.name == "Sun";
     }
@@ -2846,8 +3528,10 @@ public class OrbitPreviewView : MonoBehaviour
     {
         cachedCurrentOrbitSimPath = Array.Empty<global::SimVector3>();
         cachedCurrentOrbitLayoutBodyName = string.Empty;
+        cachedOrbitOccluderBodyName = string.Empty;
         cachedPlannedOrbitSimPath = Array.Empty<global::SimVector3>();
         hasLastOrbitRenderOrigin = false;
+        ApplyOrbitLineOccluder(enabled: false);
         ClearLineRenderer(lineRenderer);
         ClearLineRenderer(plannedLineRenderer);
         ClearLineRenderer(sphereOfInfluenceEntryLineRenderer);
@@ -2905,16 +3589,65 @@ public class OrbitPreviewView : MonoBehaviour
 
     void HideMarkers(TextMesh periapsisText, TextMesh apoapsisText)
     {
-        periapsisText.gameObject.SetActive(false);
-        apoapsisText.gameObject.SetActive(false);
+        SetMarkerVisible(periapsisText, false);
+        SetMarkerVisible(apoapsisText, false);
     }
 
     void HideMarker(TextMesh marker)
     {
-        if (marker != null)
+        SetMarkerVisible(marker, false);
+    }
+
+    bool IsPinBadgeMarker(TextMesh marker)
+    {
+        return OrbitEventBadge.FindOn(marker) != null;
+    }
+
+    Transform GetMarkerAnchor(TextMesh marker)
+    {
+        if (marker == null)
         {
-            marker.gameObject.SetActive(false);
+            return null;
         }
+
+        OrbitEventBadge badge = OrbitEventBadge.FindOn(marker);
+        return badge != null ? badge.transform : marker.transform;
+    }
+
+    bool IsMarkerVisible(TextMesh marker)
+    {
+        Transform anchor = GetMarkerAnchor(marker);
+        return anchor != null && anchor.gameObject.activeSelf;
+    }
+
+    void SetMarkerVisible(TextMesh marker, bool visible)
+    {
+        Transform anchor = GetMarkerAnchor(marker);
+
+        if (anchor != null)
+        {
+            anchor.gameObject.SetActive(visible);
+        }
+    }
+
+    void SetMarkerWorldPosition(TextMesh marker, UnityEngine.Vector3 worldPosition)
+    {
+        Transform anchor = GetMarkerAnchor(marker);
+
+        if (anchor != null)
+        {
+            anchor.position = worldPosition;
+        }
+    }
+
+    UnityEngine.Vector3 GetOrbitMarkerDisplayOffset(TextMesh marker)
+    {
+        if (IsPinBadgeMarker(marker))
+        {
+            return UnityEngine.Vector3.zero;
+        }
+
+        return new UnityEngine.Vector3(0.0f, eventLabelOffsetY, 0.0f);
     }
 
     double Dot(global::SimVector3 left, global::SimVector3 right)
@@ -2975,6 +3708,30 @@ public class OrbitPreviewView : MonoBehaviour
         return T("Orbit time T+") + FormatTime(orbitTime) + "\n" +
             T("Body") + ": " + runner.GetOrbitFocusBodyName() + "  " +
             T("Alt") + ": " + FormatDistance(hoverAltitude);
+    }
+
+    string BuildPeApHoverTooltip()
+    {
+        string title = hoveredPeApIsPeriapsis ? T("Pe") : T("Ap");
+        string text = title;
+
+        if (
+            !double.IsNaN(hoveredPeApAltitude) &&
+            !double.IsInfinity(hoveredPeApAltitude)
+        )
+        {
+            text += "\n" + T("Alt") + " " + FormatDistance(hoveredPeApAltitude);
+        }
+
+        if (
+            !double.IsNaN(hoveredPeApTime) &&
+            !double.IsInfinity(hoveredPeApTime)
+        )
+        {
+            text += "\nT+" + FormatTime(hoveredPeApTime);
+        }
+
+        return text;
     }
 
     void DrawOrbitLegend()

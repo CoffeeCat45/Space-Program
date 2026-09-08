@@ -2614,6 +2614,13 @@ partial class Simulation : ISimulationStateView
         copy.lastFlightEventMessage = lastFlightEventMessage;
         copy.simulationTime = simulationTime;
         copy.isOrbitPreview = true;
+        if (copy.ship != null)
+        {
+            copy.ship.thrust = SimVector3.Zero();
+            copy.ship.thrustAcceleration = SimVector3.Zero();
+            copy.ship.controlState.throttle = 0.0f;
+            copy.ship.controlState.rcsVector = SimVector3.Zero();
+        }
 
         return copy;
     }
@@ -3390,14 +3397,30 @@ partial class Simulation : ISimulationStateView
     {
         if (ScenarioHasSun())
         {
-            return preview.GetPlanetSphereOfInfluenceExitPreview(
+            Body primary = GetActivePrimaryBody();
+            if (primary == null || (sun != null && primary == sun))
+            {
+                return SphereOfInfluenceEntryPreview.None();
+            }
+
+            if (moon != null && primary == moon)
+            {
+                string nextBodyName = planet != null ? planet.name : CelestialBody.Earth.Name;
+                return preview.GetOutgoingSphereOfInfluencePreview(
+                    moon,
+                    moonSphereOfInfluenceRadius,
+                    nextBodyName,
+                    plannedDeltaV,
+                    maneuverTime
+                );
+            }
+
+            return preview.GetOutgoingSphereOfInfluencePreview(
+                planet,
+                planetSphereOfInfluenceRadius,
+                "Sun",
                 plannedDeltaV,
-                stepCount,
-                dt,
-                maneuverTime,
-                thrustForce,
-                burnDuration,
-                burnDt
+                maneuverTime
             );
         }
 

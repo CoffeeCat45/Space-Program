@@ -35,10 +35,10 @@ Unity-проект живёт **внутри** репозитория. GitHub �
 
 - Editor: `SpaceProgramUnity\SpaceProgram\Ships\*.json`
 - Логика: `VabFileSystem.GameDirectory` = родитель `Assets/` (`Application.dataPath/../`); плеер также читает `StreamingAssets/Ships`
-- Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources. После Windows Build — `ShareBuildExporter` кладёт лёгкую копию в `ShareBuild/` (без карт).
+- Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources. После Windows Build — `ShareBuildExporter` кладёт лёгкую копию в `ShareBuild/` (без карт, с Editor `settings.json`). Обновить карты в уже собранном `Build/` без нового BuildPipeline: **Space Program → Update Heavy Build Data**.
 - RSS DDS (`Assets/Content/Environment/…`) в Editor читаются с диска; в плеер копируются в `StreamingAssets/Content/` при Build. **Не в git.**
 
-**Настройки (графика / HUD / разработчик):** `settings.json` в `VabFileSystem.GameDirectory` (рядом с `Assets/` в Editor, рядом с `.exe` в плеере). Первый запуск копирует старые PlayerPrefs в файл. F5 и `Ships/` — отдельные файлы.
+**Настройки (графика / HUD / разработчик):** `settings.json` в `VabFileSystem.GameDirectory` (рядом с `Assets/` в Editor, рядом с `.exe` в плеере). Первый запуск копирует старые PlayerPrefs в файл. F5 и `Ships/` — отдельные файлы. Режим окна (оконный / полный экран / безрамочный) — поле `graphics.displayMode`. Экран загрузки LOD — `play.showLodLoadingScreen`. Экспорт ShareBuild копирует этот файл как есть (HUD с диска; если HUD уже загружен в Editor — сначала flush).
 
 ---
 
@@ -75,7 +75,7 @@ Map / SoI / dev toggles — [[systems/MAP_MODE_ORBIT_SOI.md]].
 
 **VAB:**
 
-- сцена Unity: `VabScene` (имя сцены, не класс)
+- сцена Unity: хост `VabScene` + аддитивно ангар `VABlvl3` (`Assets/Scenery/KSC/Interiors3D/`)
 - редактор: `VabEditorController`, каталог `PartCatalog` / `PartVisualAdapter`
 - чертежи: `VesselBlueprint` (Core) + `VabFileSystem` → `Ships/*.json`
 - сессия редактирования в Core: `VabEditSession`

@@ -168,5 +168,27 @@ public sealed class PlanetDistantVisualPolicyTests
             PlanetDistantVisualPolicy.DistantLimbStrength,
             0.001f
         );
+        Assert.AreEqual(3200, PlanetDistantVisualPolicy.CloudRenderQueue);
+        Assert.Less(
+            PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue,
+            PlanetDistantVisualPolicy.CloudRenderQueue
+        );
+    }
+
+    [Test]
+    public void UsesDistantEarthWeather_AtSunSoiAltitude()
+    {
+        Assert.IsFalse(PlanetDistantVisualPolicy.UsesDistantEarthWeather(80_000f));
+        Assert.IsFalse(
+            PlanetDistantVisualPolicy.UsesDistantEarthWeather(
+                PlanetDistantVisualPolicy.Color2KStartMeters - 1f
+            )
+        );
+        Assert.IsTrue(
+            PlanetDistantVisualPolicy.UsesDistantEarthWeather(
+                PlanetDistantVisualPolicy.Color2KStartMeters
+            )
+        );
+        Assert.IsTrue(PlanetDistantVisualPolicy.UsesDistantEarthWeather(8_920_000f));
     }
 }

@@ -164,6 +164,33 @@ public static class FlightHudSettings
         loaded = true;
     }
 
+    public static void Reload()
+    {
+        loaded = false;
+        Load();
+    }
+
+    public static bool IsLoaded => loaded;
+
+    /// <summary>
+    /// Writes in-memory HUD lines/background to <c>settings.json</c> if Play/Editor already
+    /// loaded them. ShareBuild copies that file next to the light player.
+    /// </summary>
+    public static void FlushIfLoaded()
+    {
+        if (!loaded)
+        {
+            return;
+        }
+
+        PersistHud();
+    }
+
+    public static void Unload()
+    {
+        loaded = false;
+    }
+
     public static bool IsVisible(FlightHudField field)
     {
         if (!loaded)

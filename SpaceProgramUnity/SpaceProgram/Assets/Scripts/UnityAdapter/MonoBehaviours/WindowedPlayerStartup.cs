@@ -3,13 +3,12 @@ using UnityEngine;
 static class WindowedPlayerStartup
 {
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
-    static void EnsureWindowedMode()
+    static void ApplySavedDisplayMode()
     {
+        GameSettingsStore.EnsureLoaded();
+        VabGraphicsManager.ApplyTargetFrameRate(GameSettingsStore.Data.graphics.targetFrameRate);
 #if UNITY_STANDALONE && !UNITY_EDITOR
-        if (Screen.fullScreenMode != FullScreenMode.Windowed)
-        {
-            Screen.SetResolution(1600, 900, FullScreenMode.Windowed);
-        }
+        VabGraphicsManager.ApplyDisplayMode(GameSettingsStore.Data.graphics.displayMode);
 #endif
     }
 }

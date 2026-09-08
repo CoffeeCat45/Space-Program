@@ -24,6 +24,8 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
 
     SimulationRunner runner;
     readonly List<MapModeOcclusionTarget> targets = new List<MapModeOcclusionTarget>();
+    readonly Vector3[] occluderCenters = new Vector3[2];
+    readonly float[] occluderRadii = new float[2];
     int rescanFrameCounter;
 
     public void Bind(SimulationRunner sessionRunner)
@@ -39,7 +41,7 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
             !runner.IsMapModeActive
         )
         {
-            ClearAllOcclusion();
+            AbandonAllOcclusion();
             targets.Clear();
             rescanFrameCounter = 0;
             return;
@@ -66,15 +68,7 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
             return;
         }
 
-        Vector3 planetCenter = Vector3.zero;
-        float planetRadius = WorldVisualBridge.MapPlanetRadiusUnity;
-        bool hasPlanetSphere =
-            runner.TryGetPlanetVisualTransform(out Transform planetTransform) &&
-            WorldVisualBridge.TryGetMapModePlanetOcclusionSphere(
-                planetTransform,
-                out planetCenter,
-                out planetRadius
-            );
+        CollectOccluderSpheres(out int occluderCount);
 
         for (int i = targets.Count - 1; i >= 0; i--)
         {
@@ -88,9 +82,9 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
 
             target.ApplyOcclusion(
                 camera,
-                planetCenter,
-                planetRadius,
-                hasPlanetSphere
+                occluderCenters,
+                occluderRadii,
+                occluderCount
             );
 
             if (!target.SkipsCentralPresentation())
@@ -108,8 +102,19 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
 
     void OnDisable()
     {
-        ClearAllOcclusion();
+        AbandonAllOcclusion();
         targets.Clear();
+    }
+
+    void AbandonAllOcclusion()
+    {
+        for (int i = 0; i < targets.Count; i++)
+        {
+            if (targets[i] != null)
+            {
+                targets[i].AbandonOcclusion();
+            }
+        }
     }
 
     void ClearAllOcclusion()
@@ -132,8 +137,8 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
             return;
         }
 
-        CollectTargetsFromRoot(runner.GetVesselVisualRoot());
         CollectTargetsFromRoot(runner.GetCelestialVisualRoot());
+        CollectTargetsFromRoot(runner.GetVesselVisualRoot());
 
         OrbitPreviewView orbitPreview = runner.GetOrbitPreviewView();
 
@@ -141,6 +146,42 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
         {
             CollectTargetsFromRoot(orbitPreview.transform);
         }
+    }
+
+    void CollectOccluderSpheres(out int count)
+    {
+        count = 0;
+        TryAddOccluderSphere("Planet", ref count);
+        TryAddOccluderSphere("Moon", ref count);
+    }
+
+    void TryAddOccluderSphere(string bodyName, ref int count)
+    {
+        if (
+            count >= occluderCenters.Length ||
+            runner == null ||
+            !runner.TryGetBodyVisualTransform(bodyName, out Transform visual) ||
+            visual == null
+        )
+        {
+            return;
+        }
+
+        if (
+            !WorldVisualBridge.TryGetCelestialOcclusionSphere(
+                visual,
+                out Vector3 center,
+                out float radius
+            ) ||
+            radius <= 0f
+        )
+        {
+            return;
+        }
+
+        occluderCenters[count] = center;
+        occluderRadii[count] = radius;
+        count++;
     }
 
     void CollectTargetsFromRoot(Transform root)
@@ -184,6 +225,11 @@ public sealed class MapModeUiOcclusionPass : MonoBehaviour
         }
 
         if (IsPlanetGeometry(gameObject))
+        {
+            return false;
+        }
+
+        if (gameObject.GetComponentInParent<OrbitEventBadge>(true) != null)
         {
             return false;
         }

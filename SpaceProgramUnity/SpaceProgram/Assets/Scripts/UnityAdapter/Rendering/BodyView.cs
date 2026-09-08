@@ -47,6 +47,12 @@ static class BodyView
         }
 
         MapMarkerKind markerKind = ResolveMapMarkerKind(bodyName);
+        MapModeVesselMarkerOnly markerOnly = EnsureMapModeVesselMarkerOnly(vesselObject);
+
+        if (isMapModeActive)
+        {
+            markerOnly.CaptureFlightRendererState();
+        }
 
         SetChildActive(vesselObject, BlocksContainerName, !isMapModeActive);
         SetChildActive(vesselObject, FocusPickColliderName, !isMapModeActive);
@@ -61,6 +67,18 @@ static class BodyView
         SetVectorLineActive(vesselObject, "TargetDirection", showTargetLines);
         SetVectorLineActive(vesselObject, "TargetRelativeVelocity", showTargetLines);
 
+        if (isMapModeActive)
+        {
+            HideVesselDirectionVectors(vesselObject);
+            HideNonMapMarkerRenderers(vesselObject);
+        }
+        else
+        {
+            markerOnly.RestoreFlightRendererState();
+        }
+
+        markerOnly.MapModeActive = isMapModeActive;
+
         ShipTrailView shipTrailView = vesselObject.GetComponent<ShipTrailView>();
 
         if (shipTrailView != null)
@@ -74,13 +92,29 @@ static class BodyView
 
         if (isMapModeActive)
         {
-            if (FlightRenderLayers.HasDedicatedLayers())
-            {
-                FlightRenderLayers.ApplyScaledSpaceLayer(mapMarker);
-            }
+            OrbitLineVisualUtility.ApplyOrbitOverlayLayer(mapMarker);
         }
 
         UpdateMapModePickCollider(vesselObject, isMapModeActive);
+    }
+
+    static MapModeVesselMarkerOnly EnsureMapModeVesselMarkerOnly(GameObject vesselObject)
+    {
+        MapModeVesselMarkerOnly markerOnly =
+            vesselObject.GetComponent<MapModeVesselMarkerOnly>();
+
+        if (markerOnly == null)
+        {
+            markerOnly = vesselObject.AddComponent<MapModeVesselMarkerOnly>();
+        }
+
+        return markerOnly;
+    }
+
+    internal static void ApplyMapModeMarkerOnly(GameObject vesselObject)
+    {
+        HideNonMapMarkerRenderers(vesselObject);
+        HideVesselDirectionVectors(vesselObject);
     }
 
     static MapMarkerKind ResolveMapMarkerKind(string bodyName)
@@ -120,10 +154,85 @@ static class BodyView
     {
         Transform lineTransform = parentObject.transform.Find(lineName);
 
-        if (lineTransform != null)
+        if (lineTransform == null)
         {
-            lineTransform.gameObject.SetActive(active);
+            return;
         }
+
+        lineTransform.gameObject.SetActive(active);
+        LineRenderer lineRenderer = lineTransform.GetComponent<LineRenderer>();
+
+        if (lineRenderer == null)
+        {
+            return;
+        }
+
+        lineRenderer.enabled = active;
+
+        if (!active)
+        {
+            lineRenderer.positionCount = 0;
+        }
+    }
+
+    static void HideVesselDirectionVectors(GameObject vesselObject)
+    {
+        LineRenderer[] lineRenderers =
+            vesselObject.GetComponentsInChildren<LineRenderer>(true);
+
+        for (int i = 0; i < lineRenderers.Length; i++)
+        {
+            LineRenderer lineRenderer = lineRenderers[i];
+
+            if (lineRenderer == null)
+            {
+                continue;
+            }
+
+            lineRenderer.enabled = false;
+            lineRenderer.positionCount = 0;
+            lineRenderer.gameObject.SetActive(false);
+        }
+    }
+
+    static void HideNonMapMarkerRenderers(GameObject vesselObject)
+    {
+        Renderer[] renderers = vesselObject.GetComponentsInChildren<Renderer>(true);
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer renderer = renderers[i];
+
+            if (renderer == null || IsUnderMapModeMarker(renderer.transform))
+            {
+                continue;
+            }
+
+            renderer.enabled = false;
+
+            LineRenderer lineRenderer = renderer as LineRenderer;
+
+            if (lineRenderer != null)
+            {
+                lineRenderer.positionCount = 0;
+                lineRenderer.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    static bool IsUnderMapModeMarker(Transform transform)
+    {
+        while (transform != null)
+        {
+            if (transform.name == MapModeMarkerName)
+            {
+                return true;
+            }
+
+            transform = transform.parent;
+        }
+
+        return false;
     }
 
     static GameObject EnsureMapModeMarker(GameObject vesselObject, MapMarkerKind markerKind)
@@ -162,19 +271,11 @@ static class BodyView
                 MapMarkerScreenHeightFraction;
             ScreenSpaceBillboardScaler createdScaler =
                 markerObject.GetComponent<ScreenSpaceBillboardScaler>();
-            createdScaler.Mode = ScreenSpaceBillboardScaler.BillboardMode.SurfacePin;
+            createdScaler.Mode = ScreenSpaceBillboardScaler.BillboardMode.CameraFacing;
         }
         else
         {
             markerObject = markerTransform.gameObject;
-            Renderer markerRenderer = markerObject.GetComponent<Renderer>();
-
-            if (markerRenderer != null)
-            {
-                markerRenderer.material = RuntimeMaterialFactory.CreateOrbitOverlayMarkerMaterial(
-                    GetMapMarkerColor(markerKind)
-                );
-            }
         }
 
         ScreenSpaceBillboardScaler billboardScaler =
@@ -186,7 +287,7 @@ static class BodyView
             billboardScaler.ScreenHeightFraction = MapMarkerScreenHeightFraction;
         }
 
-        billboardScaler.Mode = ScreenSpaceBillboardScaler.BillboardMode.SurfacePin;
+        billboardScaler.Mode = ScreenSpaceBillboardScaler.BillboardMode.CameraFacing;
 
         markerObject.SetActive(false);
         return markerObject;
@@ -396,6 +497,13 @@ static class BodyView
             if (globe != null)
             {
                 UnityEngine.Object.DestroyImmediate(globe);
+            }
+
+            Transform leftoverDepth = bodyObject.transform.Find("PlanetGlobeDepth");
+
+            if (leftoverDepth != null)
+            {
+                UnityEngine.Object.DestroyImmediate(leftoverDepth.gameObject);
             }
 
             FlightPlanetMapSphere rootMap = bodyObject.GetComponent<FlightPlanetMapSphere>();
@@ -1712,6 +1820,11 @@ static class BodyView
         GameObject lineObject = new GameObject(lineName);
         lineObject.transform.SetParent(parentObject.transform);
 
+        if (FlightRenderLayers.HasDedicatedLayers())
+        {
+            lineObject.layer = FlightRenderLayers.ResolveLocalPhysicsLayer();
+        }
+
         LineRenderer lineRenderer = lineObject.AddComponent<LineRenderer>();
         lineRenderer.positionCount = 2;
         lineRenderer.useWorldSpace = true;
@@ -2333,7 +2446,26 @@ static class BodyView
         BodyState bodyState
     )
     {
-        if (bodyObject.GetComponent<FlightPlanetSphere>() != null)
+        // Hibernated LOD sphere stays on the object after SoI swap. The visible
+        // mesh is then DistantCelestialGlobe (radius 0.5) and needs diameter scale,
+        // not MapPositionScale as if the baked-radius FlightPlanetSphere still drew.
+        if (DistantCelestialGlobe.IsAttached(bodyObject))
+        {
+            Vector3 unitScale = GetCelestialVisualScale(
+                bodyState.radius,
+                WorldVisualBridge.MapPositionScale
+            );
+
+            if (bodyState.name == "Sun")
+            {
+                unitScale *= WorldVisualBridge.MapSunVisualRadiusScale;
+            }
+
+            return unitScale;
+        }
+
+        FlightPlanetSphere lodSphere = bodyObject.GetComponent<FlightPlanetSphere>();
+        if (lodSphere != null && lodSphere.enabled)
         {
             // Flight mesh bakes the body radius; map mode only compresses coordinates.
             return Vector3.one * WorldVisualBridge.MapPositionScale;
@@ -2468,7 +2600,7 @@ static class BodyView
             ClearVectorLine(bodyObject, "TargetRelativeVelocity");
         }
 
-        if (bodyState.name == "Ship")
+        if (bodyState.name == "Ship" && showDirectionVectors)
         {
             UpdateShipTrail(bodyObject);
         }
@@ -2744,6 +2876,7 @@ static class BodyView
 
         lineRenderer.positionCount = 0;
         lineRenderer.enabled = false;
+        lineRenderer.gameObject.SetActive(false);
     }
 
     static void UpdateVelocityVector(

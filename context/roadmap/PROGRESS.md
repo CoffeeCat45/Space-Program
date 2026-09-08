@@ -22,7 +22,7 @@
 | 7 | Убрать LOD-freeze на паде; интерполяция спина планеты (sim×2) | ✅ 2026-08-17 |
 | 8 | Spin+radial одним quaternion; map pause без Rescan runner; LOD без collapse при M | 🟡 2026-08-17 |
 | 9 | Суточный спин: shader UV offset, transform планеты без вращения (LOD stable) | 🟡 2026-08-17 |
-| 10 | Map: orbit focus, SoI canon, dev toggles (trail / сфера SoI) | 🟡 2026-08-25 StabilizeMapCameraOnFocusBody |
+| 10 | Map: orbit focus, SoI canon, dev toggles (trail / сфера SoI) | 🟡 2026-09-08 метки корабля/Pe/Ap не сквозь диск планеты |
 
 ---
 
@@ -39,7 +39,7 @@
 
 **.exe = тот же контент, что Editor:** сборка `Space Program → Build Windows Player`. GEBCO-высоты + LocalChunks PNG; Earth splat из RSS-Terrain если pack на диске. После сборки в корне репо: `ShareBuild/` + `ShareBuild.zip` без карт (скинуть другу); полный `Build/` остаётся у тебя. Max LOD **не** поднимать автоматом до 15 на паде (L15 = просадка FPS и прыжки высот). Слайдер Terrain Graphics; эталон пада `capL=8`. Слайд −Y = physics altitude, не interpolated COM.
 
-**GitHub:** код без датасетов (`develop` → `CoffeeCat45/test1`). Карты/`.raw`/DDS только на этом ПК. `SimulationConsole` не в git. Графика/HUD/dev — `settings.json` рядом с проектом или exe.
+**GitHub:** код без датасетов (`develop` → `CoffeeCat45/test1`). Карты/`.raw`/DDS только на этом ПК. `SimulationConsole` не в git. Графика/HUD/dev — `settings.json` рядом с проектом или exe. ShareBuild копирует этот файл к другу (HUD с диска Editor, не пустой RAM-store). GFX: режим окна, MSAA, пост-AA; SMAA-качество только при SMAA. Пост-AA применяется к FlightCamera при входе в полёт. Внизу GFX: экран загрузки LOD (выкл по умолчанию). Карты в уже собранном `Build/` без пересборки: **Space Program → Update Heavy Build Data**.
 
 ---
 
@@ -75,8 +75,8 @@
 | 2 | Спавн на Луне (меню / Scenarios) для проверки LOD | 🟡 2026-08-25 near side; утро к Солнцу + фаза π |
 | 3 | LOD как у Земли: макро LROC + LDEM; ближний пол = RSS-Terrain Moon splat | 🟡 2026-08-26 LDEM 64 ppd; PNG 4K/8K; close-up Low/Mid/High/Steep |
 | 4 | Cove-площадка на Луне (как на мысе) | 🟡 2026-08-25 pad = signed LDEM (не пьедестал над maria) |
-| 5 | Луна: без «воды», звёзды, метка, Земля с облаками | 🟡 2026-09-05 PNG+ с Луны: очередь облаков 3200 после смены шейдера, не 3010 под глобусом |
-| 6 | Реальный 1:10 SMA + LOD swap Earth↔Moon mid-flight | 🟡 2026-09-05 Moon→Earth: PNG-шелл LocalPhysics сразу по высоте, не только атмосфера |
+| 5 | Луна: без «воды», звёзды, метка, Земля с облаками | 🟡 2026-09-07 SoI Солнца: Луна на карте + облака Земли |
+| 6 | Реальный 1:10 SMA + LOD swap Earth↔Moon mid-flight | 🟡 2026-09-06 Moon→Earth: PNG+облака сразу, не только атмосфера |
 
 ---
 
@@ -109,7 +109,7 @@ GPU planet engine: compute shaders + texture atlases, quadtree cube-sphere, floa
 | C18 | Per-block контакты, debris | 🟡 (18.6 polish) |
 | C19 | WorldSnapshot / QuickSave F5/F9 | ✅ |
 | C20 | Lockstep MP MVP | ✅ (2026-07-12) |
-| C21 | VAB + ReStock — см. [[systems/VAB_DEVELOPMENT.md]] | 🟡 2026-08-30 Esc→меню: камера сессии |
+| C21 | VAB + ReStock — см. [[systems/VAB_DEVELOPMENT.md]] | 🟡 2026-09-06 Esc→меню; exe: `VabScene`+`VABlvl3` |
 | C22 | Mod API | ⬜ |
 | C23 | Миссии / экономика | ⬜ |
 

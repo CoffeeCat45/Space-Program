@@ -61,6 +61,9 @@ public static class PlanetDistantVisualPolicy
     /// </summary>
     public const int FlightDistantAtmosphereRenderQueue = 3070;
 
+    /// <summary>NASA / noise cloud shells. Must stay after the Earth color globe.</summary>
+    public const int CloudRenderQueue = 3200;
+
     /// <summary>
     /// Visible Chapman rim from the Moon (~2% of 1:10 Earth radius). Interior
     /// flight shell stays <see cref="AtmosphereShellHeightMeters"/>.
@@ -109,6 +112,15 @@ public static class PlanetDistantVisualPolicy
     public static bool UsesDistantColor2K(GlobeQuality quality)
     {
         return quality != GlobeQuality.Full;
+    }
+
+    /// <summary>
+    /// LOD Earth at this altitude is a PNG disk (SoI exit, Earth-from-Moon).
+    /// Clouds need the distant 8 km shell; flight PNG must drop ZWrite or weather loses ZTest.
+    /// </summary>
+    public static bool UsesDistantEarthWeather(float altitudeMeters)
+    {
+        return altitudeMeters >= Color2KStartMeters;
     }
 
     public static int GetShellSubdivisions(GlobeQuality quality, bool mapMode)
@@ -203,5 +215,45 @@ public static class PlanetDistantVisualPolicy
 
         float scaleByDistance = DistantSecondaryTargetCenterMeters / centerDistance;
         return Mathf.Clamp(Mathf.Min(scaleByDistance, scaleByClip), 0.002f, 1f);
+    }
+
+    /// <summary>
+    /// Map PNG must stay opaque with ZWrite so the color map is visible.
+    /// Flight distant Earth (from the Moon) turns ZWrite off so the 8 km cloud
+    /// shell wins ZTest; lunar terrain still occludes the disk.
+    /// Do not put a second depth mesh on Earth — a failed/black pass covers the PNG.
+    /// </summary>
+    public static void ApplyEarthColorGlobeCompositing(Material material, bool mapMode)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (mapMode)
+        {
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+            material.SetFloat("_ZWrite", 1f);
+            material.SetOverrideTag("RenderType", "Opaque");
+            return;
+        }
+
+        material.renderQueue = FlightDistantGlobeRenderQueue;
+        material.SetFloat("_ZWrite", 0f);
+        material.SetOverrideTag("RenderType", "Transparent");
+    }
+
+    public static void ApplyMoonGlobeCompositing(Material material, bool mapMode)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        material.renderQueue = mapMode ?
+            (int)UnityEngine.Rendering.RenderQueue.Geometry :
+            FlightDistantGlobeRenderQueue;
+        material.SetFloat("_ZWrite", 1f);
+        material.SetOverrideTag("RenderType", "Opaque");
     }
 }

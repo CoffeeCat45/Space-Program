@@ -14,8 +14,8 @@ Origin: `https://github.com/CoffeeCat45/test1.git`, ветка `develop` (`b5902
 
 | Что | Зачем на ПК |
 |-----|-------------|
-| `Build/` (~9 ГБ) | Собранный `.exe` с картами |
-| `ShareBuild/` + `ShareBuild.zip` | Тот же плеер **без** Planet/MapMode/RSS — скинуть другу |
+| `Build/` (~9 ГБ) | Собранный `.exe` с картами. Обновить только карты: меню **Space Program → Update Heavy Build Data** (не входит в основной Build) |
+| `ShareBuild/` + `ShareBuild.zip` | Тот же плеер **без** Planet/MapMode/RSS + копия Editor `settings.json` — скинуть другу |
 | `Library/` (~3 ГБ) | Кеш Unity |
 | `Не используемые/` (~7 ГБ) | Старый RSS/ReStock/TIFF, `Pipeline/` |
 | `файлы луны/` (~405 МБ) | Сырьё LROC |

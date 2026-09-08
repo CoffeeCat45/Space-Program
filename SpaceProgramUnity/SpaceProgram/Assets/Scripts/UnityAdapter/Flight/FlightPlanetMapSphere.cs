@@ -60,6 +60,10 @@ public sealed class FlightPlanetMapSphere : MonoBehaviour
 
     public bool HasBuiltMesh => runtimeMesh != null;
 
+    public Mesh SharedMesh => runtimeMesh != null ?
+        runtimeMesh :
+        (meshFilter != null ? meshFilter.sharedMesh : null);
+
     public static Mesh BuildIcosphereMeshPublic(int subdivisions, float radius)
     {
         return BuildIcosphereMesh(subdivisions, radius);

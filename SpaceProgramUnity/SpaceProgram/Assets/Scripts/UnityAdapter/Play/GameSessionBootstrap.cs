@@ -291,6 +291,15 @@ public class GameSessionBootstrap : MonoBehaviour
     IEnumerator DeferredPresentationSync()
     {
         yield return null;
+
+        if (
+            runner != null &&
+            runner.SessionMode == GameSessionMode.VabEditor
+        )
+        {
+            VabSessionSceneUtility.TryLoadVabScene(logErrorIfMissing: false);
+        }
+
         vabRootsCollected = false;
         ApplyPresentation(force: true);
     }

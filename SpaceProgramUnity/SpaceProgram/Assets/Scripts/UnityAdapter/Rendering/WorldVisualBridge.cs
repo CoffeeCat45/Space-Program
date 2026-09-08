@@ -14,11 +14,11 @@ public static class WorldVisualBridge
     public const float MapPositionScale = 0.001f;
 
     /// <summary>
-    /// Map-only: stretch the Sun away from Earth so the lunar orbit has room.
-    /// Core Earth–Sun distance stays 44.3 Mm. Applied to the sun mesh, its light,
-    /// and Earth-around-Sun orbit lines. Not applied when orbit-focus is the Sun.
+    /// Map heliocentric layout scale about Earth. Must stay 1: the old 4×
+    /// Earth-centric offset put the Sun disc away from the physical heliocentric
+    /// ship/Earth orbits. Disc size is <see cref="MapSunVisualRadiusScale"/>.
     /// </summary>
-    public const double MapHeliocentricVisualScale = 4.0;
+    public const double MapHeliocentricVisualScale = 1.0;
 
     /// <summary>
     /// Toy photosphere (4e6 m) is huge next to Earth. Shrink the map disc;
@@ -681,16 +681,9 @@ public static class WorldVisualBridge
         global::SimVector3 renderOrigin
     )
     {
-        if (simulation == null || simulation.sun == null || simulation.planet == null)
-        {
-            return false;
-        }
-
-        double distanceSquared = simulation.sun.position
-            .Subtract(renderOrigin)
-            .LengthSquared();
-        double sunRadius = Math.Max(simulation.sun.radius, 1.0);
-        return distanceSquared > sunRadius * sunRadius;
+        _ = simulation;
+        _ = renderOrigin;
+        return false;
     }
 
     internal static global::SimVector3 ExaggerateMapAwayFromPlanet(
@@ -1053,6 +1046,70 @@ public static class WorldVisualBridge
         return true;
     }
 
+    public static bool TryGetCelestialOcclusionSphere(
+        Transform bodyTransform,
+        out Vector3 center,
+        out float radius
+    )
+    {
+        center = Vector3.zero;
+        radius = 0f;
+
+        if (bodyTransform == null)
+        {
+            return false;
+        }
+
+        center = bodyTransform.position;
+        Transform mapSphere = bodyTransform.Find("PlanetMapSphere");
+        // Hibernated LOD leaves an inactive baked-radius child. After SoI swap the
+        // parent is a unit-diameter distant globe — that child would read as a
+        // multi-million-unit occluder and swallow the ship marker.
+        if (
+            mapSphere != null &&
+            mapSphere.gameObject.activeInHierarchy &&
+            TryGetMeshOcclusionSphere(mapSphere, out center, out radius)
+        )
+        {
+            return true;
+        }
+
+        if (TryGetMeshOcclusionSphere(bodyTransform, out center, out radius))
+        {
+            return true;
+        }
+
+        return TryGetMapModePlanetOcclusionSphere(bodyTransform, out center, out radius);
+    }
+
+    static bool TryGetMeshOcclusionSphere(
+        Transform meshTransform,
+        out Vector3 center,
+        out float radius
+    )
+    {
+        center = Vector3.zero;
+        radius = 0f;
+
+        if (meshTransform == null)
+        {
+            return false;
+        }
+
+        MeshFilter filter = meshTransform.GetComponent<MeshFilter>();
+        if (filter == null || filter.sharedMesh == null)
+        {
+            return false;
+        }
+
+        center = meshTransform.position;
+        Vector3 extents = filter.sharedMesh.bounds.extents;
+        float meshRadius = Mathf.Max(extents.x, Mathf.Max(extents.y, extents.z));
+        float scale = Mathf.Max(meshTransform.lossyScale.x, 1e-8f);
+        radius = meshRadius * scale;
+        return radius > 0f;
+    }
+
     public static bool IsMapMarkerVisibleFromCamera(
         Camera camera,
         Vector3 markerWorldPosition,
@@ -1130,6 +1187,11 @@ public static class WorldVisualBridge
 
         Vector3 rayDirection = toTarget / targetDistance;
         Vector3 originToCenter = rayOrigin - sphereCenter;
+        if (originToCenter.sqrMagnitude < sphereRadius * sphereRadius)
+        {
+            return false;
+        }
+
         float projection = Vector3.Dot(rayDirection, originToCenter);
         float discriminant =
             projection * projection -

@@ -46,7 +46,9 @@ static class RuntimeMaterialFactory
                     continue;
                 }
 
-                Shader shader = Shader.Find(shaderNames[i]);
+                Shader shader = shaderNames[i].StartsWith("SpaceProgram/") ?
+                    SpaceProgramShaders.Find(shaderNames[i]) :
+                    Shader.Find(shaderNames[i]);
 
                 if (shader != null)
                 {
@@ -123,11 +125,18 @@ static class RuntimeMaterialFactory
 
     public static Material CreateOrbitLineMaterial(Color color)
     {
-        Material material = CreateMaterial(
-            "Universal Render Pipeline/Unlit",
-            "Sprites/Default",
-            "Unlit/Color"
+        Material material = SpaceProgramShaders.CreateMaterial(
+            "SpaceProgram/OrbitLineOverlay"
         );
+
+        if (material == null)
+        {
+            material = CreateMaterial(
+                "Sprites/Default",
+                "Universal Render Pipeline/Unlit",
+                "Unlit/Color"
+            );
+        }
 
         if (material == null)
         {
@@ -141,15 +150,38 @@ static class RuntimeMaterialFactory
 
     public static Material CreateOrbitOverlayMarkerMaterial(Color color)
     {
-        Material material = CreateColoredMaterial(color, SolidShaderNames);
+        Material material = SpaceProgramShaders.CreateMaterial(
+            "SpaceProgram/OrbitMarkerOverlay"
+        );
+
+        if (material == null)
+        {
+            material = CreateColoredMaterial(color, SolidShaderNames);
+        }
 
         if (material == null)
         {
             return null;
         }
 
+        ApplyColor(material, color);
         ApplyOrbitOverlayDepthSettings(material);
         return material;
+    }
+
+    public static void ApplyMainTexture(Material material, Texture texture)
+    {
+        if (material == null || texture == null)
+        {
+            return;
+        }
+
+        if (material.HasProperty("_MainTex"))
+        {
+            material.SetTexture("_MainTex", texture);
+        }
+
+        material.mainTexture = texture;
     }
 
     public static void ApplyOrbitOverlayRenderer(Renderer renderer)

@@ -75,7 +75,7 @@ public sealed class OrbitOverlayCamera : MonoBehaviour
         overlayObject.hideFlags = HideFlags.HideInHierarchy;
 
         overlayCamera = overlayObject.AddComponent<Camera>();
-        overlayCamera.clearFlags = CameraClearFlags.Depth;
+        overlayCamera.clearFlags = CameraClearFlags.Nothing;
         overlayCamera.cullingMask = orbitLayerMask;
         overlayCamera.depth = sourceCamera.depth + 1f;
         overlayCamera.allowHDR = sourceCamera.allowHDR;
@@ -96,6 +96,7 @@ public sealed class OrbitOverlayCamera : MonoBehaviour
         if (overlayData != null)
         {
             overlayData.renderType = CameraRenderType.Overlay;
+            SetOverlayRetainBaseDepth(overlayData);
             overlayData.renderPostProcessing = false;
             overlayData.antialiasing = AntialiasingMode.None;
             overlayData.dithering = false;
@@ -172,11 +173,33 @@ public sealed class OrbitOverlayCamera : MonoBehaviour
             sourceTransform.rotation
         );
 
+        overlayCamera.clearFlags = CameraClearFlags.Nothing;
         overlayCamera.orthographic = sourceCamera.orthographic;
         overlayCamera.fieldOfView = sourceCamera.fieldOfView;
         overlayCamera.orthographicSize = sourceCamera.orthographicSize;
         overlayCamera.nearClipPlane = sourceCamera.nearClipPlane;
         overlayCamera.farClipPlane = sourceCamera.farClipPlane;
         overlayCamera.rect = sourceCamera.rect;
+        SetOverlayRetainBaseDepth(overlayCamera.GetUniversalAdditionalCameraData());
+    }
+
+    static void SetOverlayRetainBaseDepth(UniversalAdditionalCameraData overlayData)
+    {
+        if (overlayData == null)
+        {
+            return;
+        }
+
+        System.Reflection.FieldInfo clearDepthField =
+            typeof(UniversalAdditionalCameraData).GetField(
+                "m_ClearDepth",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic
+            );
+
+        if (clearDepthField != null && clearDepthField.FieldType == typeof(bool))
+        {
+            clearDepthField.SetValue(overlayData, false);
+        }
     }
 }

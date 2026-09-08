@@ -68,9 +68,9 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
 
     public void ApplyOcclusion(
         Camera camera,
-        Vector3 planetCenter,
-        float planetRadius,
-        bool hasPlanetSphere
+        Vector3[] occluderCenters,
+        float[] occluderRadii,
+        int occluderCount
     )
     {
         if (!isActiveAndEnabled)
@@ -80,16 +80,57 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
         }
 
         EnsureRendererCache();
+        ResolveVisualTransform();
 
         Vector3 occlusionSamplePosition = ResolveOcclusionSamplePosition();
+        bool isVesselMarker = IsVesselMapMarker();
 
-        bool visible = WorldVisualBridge.IsMapMarkerVisibleFromCamera(
-            camera,
-            occlusionSamplePosition,
-            planetCenter,
-            planetRadius,
-            hasPlanetSphere
-        );
+        if (isVesselMarker && camera != null && occluderCount > 0)
+        {
+            Transform markerRoot = transform.parent != null ? transform.parent : transform;
+            occlusionSamplePosition = LiftVesselMarkerOffGlobes(
+                camera,
+                markerRoot.position,
+                occluderCenters,
+                occluderRadii,
+                occluderCount
+            );
+        }
+
+        bool visible = true;
+
+        for (int i = 0; i < occluderCount; i++)
+        {
+            if (
+                isVesselMarker &&
+                MapMarkerPlacement.IsOnNearHemisphere(
+                    camera.transform.position,
+                    occluderCenters[i],
+                    occlusionSamplePosition
+                )
+            )
+            {
+                Vector3 offset = occlusionSamplePosition - occluderCenters[i];
+                if (offset.sqrMagnitude <= occluderRadii[i] * occluderRadii[i])
+                {
+                    continue;
+                }
+            }
+
+            if (
+                !WorldVisualBridge.IsMapMarkerVisibleFromCamera(
+                    camera,
+                    occlusionSamplePosition,
+                    occluderCenters[i],
+                    occluderRadii[i],
+                    hasPlanetSphere: true
+                )
+            )
+            {
+                visible = false;
+                break;
+            }
+        }
 
         if (visible)
         {
@@ -99,6 +140,54 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
         }
 
         ApplyOcclusionHide();
+    }
+
+    Vector3 LiftVesselMarkerOffGlobes(
+        Camera camera,
+        Vector3 worldPosition,
+        Vector3[] occluderCenters,
+        float[] occluderRadii,
+        int occluderCount
+    )
+    {
+        Vector3 lifted = worldPosition;
+
+        for (int i = 0; i < occluderCount; i++)
+        {
+            if (
+                !MapMarkerPlacement.IsOnNearHemisphere(
+                    camera.transform.position,
+                    occluderCenters[i],
+                    lifted
+                )
+            )
+            {
+                continue;
+            }
+
+            lifted = MapMarkerPlacement.LiftOutOfGlobe(
+                lifted,
+                occluderCenters[i],
+                occluderRadii[i],
+                extraPadding: 0.35f
+            );
+        }
+
+        if (lifted != worldPosition && visualTransform != null)
+        {
+            visualTransform.position = lifted;
+        }
+
+        return lifted;
+    }
+
+    public void AbandonOcclusion()
+    {
+        occlusionApplied = false;
+        renderersCached = false;
+        visualTransformCached = false;
+        presentationModeCached = false;
+        visualTransform = null;
     }
 
     public void ClearOcclusion()
@@ -218,11 +307,6 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
 
     void ApplyOcclusionHide()
     {
-        if (occlusionApplied)
-        {
-            return;
-        }
-
         EnsureRendererCache();
 
         for (int i = 0; i < renderers.Length; i++)
@@ -234,7 +318,11 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
                 continue;
             }
 
-            rendererEnabledSnapshot[i] = renderer.enabled;
+            if (!occlusionApplied)
+            {
+                rendererEnabledSnapshot[i] = renderer.enabled;
+            }
+
             renderer.enabled = false;
         }
 
@@ -247,7 +335,11 @@ sealed class MapModeOcclusionTarget : MonoBehaviour
                 continue;
             }
 
-            canvasAlphaSnapshot[i] = canvasGroup.alpha;
+            if (!occlusionApplied)
+            {
+                canvasAlphaSnapshot[i] = canvasGroup.alpha;
+            }
+
             canvasGroup.alpha = 0f;
         }
 

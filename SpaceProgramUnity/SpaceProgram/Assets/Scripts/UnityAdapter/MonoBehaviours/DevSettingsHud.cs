@@ -48,7 +48,8 @@ public sealed class DevSettingsHud : MonoBehaviour
             runner == null ||
             !runner.IsInitialized ||
             runner.IsMainMenuVisible ||
-            runner.IsVabEditorActive
+            runner.IsVabEditorActive ||
+            FlightLodLoadingOverlay.IsBlocking
         )
         {
             return;

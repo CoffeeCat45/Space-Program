@@ -7,9 +7,9 @@ using UnityEngine.Rendering;
 /// </summary>
 static class OrbitLineVisualUtility
 {
-    public const float CurrentOrbitPixelWidth = 2.0f;
-    public const float CelestialOrbitBackgroundPixelWidth = 0.35f;
-    public const float CelestialOrbitFocusedPixelWidth = 1.15f;
+    public const float CurrentOrbitPixelWidth = 2.8f;
+    public const float CelestialOrbitBackgroundPixelWidth = 1.55f;
+    public const float CelestialOrbitFocusedPixelWidth = 2.0f;
     public const float CelestialOrbitPixelWidth = CelestialOrbitFocusedPixelWidth;
     public const float PlannedOrbitPixelWidth = 2.0f;
     public const float SoiEntryPixelWidth = 2.5f;
@@ -24,7 +24,6 @@ static class OrbitLineVisualUtility
 
     static int cachedOverlayLayer = int.MinValue;
     static bool overlayLayerResolved;
-    static Material sharedOrbitLineMaterial;
 
     public static bool HasDedicatedOverlayLayer()
     {
@@ -66,7 +65,9 @@ static class OrbitLineVisualUtility
         lineRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
         lineRenderer.startColor = color;
         lineRenderer.endColor = color;
-        lineRenderer.material = GetOrbitLineMaterial();
+        lineRenderer.material = RuntimeMaterialFactory.CreateOrbitLineMaterial(
+            new Color(color.r, color.g, color.b, 1.0f)
+        );
         lineRenderer.enabled = false;
 
         int overlayLayer = ResolveOrbitOverlayLayer();
@@ -113,16 +114,5 @@ static class OrbitLineVisualUtility
         }
 
         ApplyOverlayLayerRecursive(rootObject.transform);
-    }
-
-    static Material GetOrbitLineMaterial()
-    {
-        if (sharedOrbitLineMaterial != null)
-        {
-            return sharedOrbitLineMaterial;
-        }
-
-        sharedOrbitLineMaterial = RuntimeMaterialFactory.CreateOrbitLineMaterial(Color.white);
-        return sharedOrbitLineMaterial;
     }
 }

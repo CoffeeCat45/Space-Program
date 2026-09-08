@@ -84,6 +84,14 @@ class ShareBuildExporter : IPostprocessBuildWithReport
 
             Directory.CreateDirectory(shareDirectory);
             int copied = CopyPlayerWithoutHeavyMaps(playerDirectory, shareDirectory);
+            bool copiedEditorSettings = TryCopyEditorSettingsJson(shareDirectory);
+            if (!copiedEditorSettings)
+            {
+                Debug.LogWarning(
+                    "ShareBuildExporter: no editor settings.json — friend will get defaults."
+                );
+            }
+
             WriteShareReadme(shareDirectory);
 
             if (File.Exists(zipPath))
@@ -100,7 +108,8 @@ class ShareBuildExporter : IPostprocessBuildWithReport
 
             Debug.Log(
                 "Space Program: ShareBuild " + copied + " file(s) → " + shareDirectory +
-                " and " + zipPath
+                " and " + zipPath +
+                (copiedEditorSettings ? " (editor settings.json included)" : "")
             );
         }
         catch (Exception exception)
@@ -111,6 +120,40 @@ class ShareBuildExporter : IPostprocessBuildWithReport
         {
             EditorUtility.ClearProgressBar();
         }
+    }
+
+    public static bool TryCopyEditorSettingsJson(string destinationDirectory)
+    {
+        if (string.IsNullOrEmpty(destinationDirectory) || !Directory.Exists(destinationDirectory))
+        {
+            return false;
+        }
+
+        try
+        {
+            FlightHudSettings.FlushIfLoaded();
+            if (!File.Exists(GameSettingsStore.FilePath))
+            {
+                GameSettingsStore.EnsureLoaded();
+                GameSettingsStore.SaveToDisk();
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                "ShareBuildExporter: could not flush editor settings.json — " + exception.Message
+            );
+        }
+
+        string sourcePath = GameSettingsStore.FilePath;
+        if (!File.Exists(sourcePath))
+        {
+            return false;
+        }
+
+        string destinationPath = Path.Combine(destinationDirectory, GameSettingsStore.FileName);
+        File.Copy(sourcePath, destinationPath, overwrite: true);
+        return true;
     }
 
     static int CopyPlayerWithoutHeavyMaps(string sourceDirectory, string destinationDirectory)
@@ -153,7 +196,7 @@ class ShareBuildExporter : IPostprocessBuildWithReport
         return copied;
     }
 
-    static bool ShouldSkipRelativePath(string relative)
+    public static bool ShouldSkipRelativePath(string relative)
     {
         if (string.IsNullOrEmpty(relative))
         {
@@ -208,6 +251,7 @@ class ShareBuildExporter : IPostprocessBuildWithReport
         string text =
             "Space Program — сборка без карт планет (GEBCO/LDEM/PNG/RSS DDS).\n" +
             "Полный Build/ с датасетами остаётся у автора.\n\n" +
+            "settings.json рядом с exe — копия настроек автора из Editor (графика, HUD, облака, dev).\n" +
             "Игра запустится, но земля/луна без локальных карт не нарисуются.\n" +
             "Список тяжёлых файлов: GITHUB_HEAVY_FILES.md в репозитории.\n";
         File.WriteAllText(Path.Combine(shareDirectory, ShareReadmeFileName), text);

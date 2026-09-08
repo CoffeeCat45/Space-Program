@@ -29,6 +29,7 @@ Shader "SpaceProgram/OrbitLineOverlay"
             #pragma vertex Vert
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "OrbitOverlayOcclusion.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _BaseColor;
@@ -43,19 +44,27 @@ Shader "SpaceProgram/OrbitLineOverlay"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
                 half4 color : COLOR;
             };
 
             Varyings Vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionWS = positionWS;
+                output.positionCS = TransformWorldToHClip(positionWS);
                 output.color = input.color * _BaseColor;
                 return output;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
+                if (IsOccludedByPlanet(input.positionWS))
+                {
+                    discard;
+                }
+
                 return input.color;
             }
             ENDHLSL

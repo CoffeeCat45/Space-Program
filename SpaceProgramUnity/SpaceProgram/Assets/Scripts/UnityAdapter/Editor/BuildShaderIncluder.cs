@@ -26,6 +26,7 @@ static class BuildShaderIncluder
         "SpaceProgram/EarthPlanetOcean",
         "SpaceProgram/EarthPlanetSurface",
         "SpaceProgram/OrbitLineOverlay",
+        "SpaceProgram/OrbitMarkerOverlay",
     };
 
     static BuildShaderIncluder()

@@ -49,7 +49,7 @@ public sealed class FlightPlanetCloudLayers : MonoBehaviour
     static readonly int LayerKindShaderId = Shader.PropertyToID("_LayerKind");
     static readonly int OrbitViewShaderId = Shader.PropertyToID("_OrbitView");
     const string ThinLayerKeyword = "_CLOUD_THIN";
-    const int CloudRenderQueue = 3200;
+    const int CloudRenderQueue = PlanetDistantVisualPolicy.CloudRenderQueue;
 
     Transform lowLayer;
     Transform highLayer;
