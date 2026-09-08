@@ -76,9 +76,11 @@ public sealed class ScreenSpaceBillboardScaler : MonoBehaviour
             anchorWorldPosition,
             facingCamera.transform.position
         );
-        float verticalFovRadians = facingCamera.fieldOfView * Mathf.Deg2Rad;
-        float screenWorldHeight = 2.0f * distance * Mathf.Tan(verticalFovRadians * 0.5f);
-        float markerWorldSize = screenWorldHeight * screenHeightFraction;
+        float markerWorldSize = ComputeBillboardWorldSize(
+            facingCamera,
+            distance,
+            screenHeightFraction
+        );
         bool sizeChanged =
             float.IsNaN(lastAppliedWorldSize) ||
             Mathf.Abs(markerWorldSize - lastAppliedWorldSize) >
@@ -123,16 +125,41 @@ public sealed class ScreenSpaceBillboardScaler : MonoBehaviour
             return;
         }
 
-        if (sizeChanged)
+        lastAppliedWorldSize = markerWorldSize;
+        transform.localScale = new Vector3(markerWorldSize, markerWorldSize, 1.0f);
+    }
+
+    public static float ComputeBillboardWorldSize(
+        Camera camera,
+        float distance,
+        float screenHeightFraction
+    )
+    {
+        if (camera == null)
         {
-            lastAppliedWorldSize = markerWorldSize;
-            transform.localScale = new Vector3(markerWorldSize, markerWorldSize, 1.0f);
+            return 1.0f;
         }
+
+        float screenWorldHeight;
+
+        if (camera.orthographic)
+        {
+            screenWorldHeight = 2.0f * camera.orthographicSize;
+        }
+        else
+        {
+            float safeDistance = Mathf.Max(distance, camera.nearClipPlane);
+            float verticalFovRadians = camera.fieldOfView * Mathf.Deg2Rad;
+            screenWorldHeight =
+                2.0f * safeDistance * Mathf.Tan(verticalFovRadians * 0.5f);
+        }
+
+        return Mathf.Max(screenWorldHeight * screenHeightFraction, 1e-4f);
     }
 
     Vector3 ResolveAnchorWorldPosition()
     {
-        if (transform.parent != null)
+        if (billboardMode == BillboardMode.SurfacePin && transform.parent != null)
         {
             return transform.parent.position;
         }

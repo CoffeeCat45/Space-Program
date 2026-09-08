@@ -1200,6 +1200,7 @@ public sealed class EarthAssetValidator : MonoBehaviour
         "PlaybackScene",
         "VabScene",
         "VABScene",
+        "VABlvl3",
         "vablvl3",
         "vablvl",
     };

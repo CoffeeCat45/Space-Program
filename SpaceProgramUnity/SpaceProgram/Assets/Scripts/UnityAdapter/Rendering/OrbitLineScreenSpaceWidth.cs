@@ -39,16 +39,73 @@ public sealed class OrbitLineScreenSpaceWidth : MonoBehaviour
             return;
         }
 
-        float distance = Vector3.Distance(
-            camera.transform.position,
-            GetLineCenterWorld()
-        );
+        float distance = GetLineWidthReferenceDistance(camera, lineRenderer);
         float worldWidth = ConvertPixelWidthToWorld(camera, distance, pixelWidth);
         lineRenderer.startWidth = worldWidth;
         lineRenderer.endWidth = worldWidth;
     }
 
-    Vector3 GetLineCenterWorld()
+    public static float GetLineWidthReferenceDistance(
+        Camera camera,
+        LineRenderer lineRenderer
+    )
+    {
+        if (camera == null || lineRenderer == null || lineRenderer.positionCount < 1)
+        {
+            return 1.0f;
+        }
+
+        float nearClip = Mathf.Max(camera.nearClipPlane, 1e-4f);
+        Vector3 cameraPosition = camera.transform.position;
+        Vector3 cameraForward = camera.transform.forward;
+        float pivotDepth = Mathf.Max(
+            Vector3.Dot(-cameraPosition, cameraForward),
+            nearClip
+        );
+        float bestDepth = float.PositiveInfinity;
+        int count = lineRenderer.positionCount;
+
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 worldPosition = lineRenderer.useWorldSpace ?
+                lineRenderer.GetPosition(i) :
+                lineRenderer.transform.TransformPoint(lineRenderer.GetPosition(i));
+            float depth = Vector3.Dot(worldPosition - cameraPosition, cameraForward);
+
+            if (depth < nearClip)
+            {
+                continue;
+            }
+
+            if (depth < bestDepth)
+            {
+                bestDepth = depth;
+            }
+        }
+
+        if (float.IsPositiveInfinity(bestDepth))
+        {
+            Vector3 fallbackPosition = GetLineCenterWorld(lineRenderer);
+            float fallbackDepth = Vector3.Dot(
+                fallbackPosition - cameraPosition,
+                cameraForward
+            );
+            bestDepth = Mathf.Max(Mathf.Abs(fallbackDepth), nearClip);
+        }
+
+        if (pivotDepth > nearClip * 2.0f)
+        {
+            bestDepth = Mathf.Clamp(
+                bestDepth,
+                pivotDepth * 0.35f,
+                pivotDepth * 3.0f
+            );
+        }
+
+        return bestDepth;
+    }
+
+    static Vector3 GetLineCenterWorld(LineRenderer lineRenderer)
     {
         int index = lineRenderer.positionCount == 1 ?
             0 :
@@ -66,9 +123,19 @@ public sealed class OrbitLineScreenSpaceWidth : MonoBehaviour
         float pixelWidth
     )
     {
-        float safeDistance = Mathf.Max(distance, camera.nearClipPlane);
-        float worldHeight =
-            2.0f * safeDistance * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f);
+        float worldHeight;
+
+        if (camera.orthographic)
+        {
+            worldHeight = 2.0f * camera.orthographicSize;
+        }
+        else
+        {
+            float safeDistance = Mathf.Max(distance, camera.nearClipPlane);
+            worldHeight =
+                2.0f * safeDistance * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f);
+        }
+
         float worldPerPixel = worldHeight / Mathf.Max(Screen.height, 1f);
         return Mathf.Max(worldPerPixel * pixelWidth, 1e-6f);
     }

@@ -38,6 +38,13 @@ public static class GameSettingsStore
         loaded = false;
     }
 
+    public static void ReloadFromDisk()
+    {
+        data = null;
+        loaded = false;
+        EnsureLoaded();
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void AutoLoad()
     {
@@ -128,6 +135,8 @@ public static class GameSettingsStore
             postAaEnabled = data.graphics.postAaEnabled,
             postAaMode = data.graphics.postAaMode,
             postAaQuality = data.graphics.postAaQuality,
+            displayMode = VabGraphicsManager.ClampDisplayMode(data.graphics.displayMode),
+            targetFrameRate = VabGraphicsManager.ClampTargetFrameRate(data.graphics.targetFrameRate),
         };
         return true;
     }
@@ -141,6 +150,8 @@ public static class GameSettingsStore
         data.graphics.postAaEnabled = snapshot.postAaEnabled;
         data.graphics.postAaMode = snapshot.postAaMode;
         data.graphics.postAaQuality = snapshot.postAaQuality;
+        data.graphics.displayMode = VabGraphicsManager.ClampDisplayMode(snapshot.displayMode);
+        data.graphics.targetFrameRate = VabGraphicsManager.ClampTargetFrameRate(snapshot.targetFrameRate);
         SaveToDisk();
     }
 
@@ -163,6 +174,7 @@ public static class GameSettingsStore
 
     public static void WriteHudBackground(FlightHudBackground background)
     {
+        EnsureLoaded();
         data.hud.background = background.ToString();
     }
 
@@ -245,6 +257,7 @@ public static class GameSettingsStore
         created.developer.atmosphereOpacity = 1f;
         created.play.showTargetDirectionLine = true;
         created.play.lastScenario = (int)SimulationScenario.PlanetSurfaceStart;
+        created.play.showLodLoadingScreen = false;
         created.hud.language = "Russian";
         created.hud.background = FlightHudBackground.Transparent.ToString();
         created.hud.hiddenFields = Array.Empty<string>();

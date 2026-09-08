@@ -266,6 +266,42 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Loading cover: Max LOD under the rocket, pad span fine, bootstrap/warmup done.
+    /// Does not wait for in-disk unfinished (horizon keeps splitting).
+    /// </summary>
+    public static bool TryGetLodLoadingReadiness(
+        out bool hasQuadtree,
+        out bool hasViewerMesh,
+        out int viewerLeafLevel,
+        out int activeMaxLodLevel,
+        out bool padStillCoarse,
+        out bool bootstrapping,
+        out bool warmupActive
+    )
+    {
+        if (activeInstance == null)
+        {
+            hasQuadtree = false;
+            hasViewerMesh = false;
+            viewerLeafLevel = -1;
+            activeMaxLodLevel = 0;
+            padStillCoarse = false;
+            bootstrapping = false;
+            warmupActive = false;
+            return false;
+        }
+
+        hasQuadtree = activeInstance.quadtree != null;
+        hasViewerMesh = hasQuadtree && activeInstance.quadtree.ViewerAreaHasRenderableMesh();
+        viewerLeafLevel = hasQuadtree ? activeInstance.quadtree.GetViewerLeafLevel() : -1;
+        activeMaxLodLevel = hasQuadtree ? activeInstance.quadtree.GetActiveMaxLodLevel() : 0;
+        padStillCoarse = activeInstance.NeedsViewerPadLodBootstrap();
+        bootstrapping = activeInstance.IsLodBootstrapping();
+        warmupActive = activeInstance.IsLodWarmupActive();
+        return true;
+    }
+
     public static void RefreshActiveEarthColorShaderProperties()
     {
         activeInstance?.RefreshEarthColorShaderProperties();
@@ -360,6 +396,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
 
         enabled = false;
         SetOwnedLodVisualsActive(false);
+        DestroyNamedChild(transform, "PlanetMapSphere");
+        mapSphereRoot = null;
+        mapSphere = null;
     }
 
     public void ResumeFromHibernate()
@@ -368,10 +407,39 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         enabled = true;
         EnsureComponents();
         DisableLegacyPlanetMesh();
-        altitudeShellState.ShellMeshReady = false;
+        altitudeShellState = default;
         RefreshOwnedShellsAfterLodSwap();
         SetOwnedLodVisualsActive(true);
         RequestViewerLodBootstrap();
+    }
+
+    /// <summary>
+    /// After Moon↔Earth SoI: show the PNG disk on the flight camera immediately
+    /// (not ScaledSpace) and restore cloud/atmosphere layers.
+    /// </summary>
+    public void ApplyPresentationAfterSoISwap(bool mapMode)
+    {
+        if (mapMode)
+        {
+            if (!mapModeActive)
+            {
+                SetMapModeActive(true);
+            }
+            else
+            {
+                ApplyMapModePresentation(true);
+            }
+
+            return;
+        }
+
+        if (mapModeActive)
+        {
+            SetMapModeActive(false);
+        }
+
+        UpdateAltitudeShellPresentation();
+        ApplyAtmosphereCloudVisuals();
     }
 
     void RefreshOwnedShellsAfterLodSwap()
@@ -433,6 +501,7 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         DestroyNamedChild(planetObject.transform, "PlanetMapSphere");
         DestroyNamedChild(planetObject.transform, "PlanetClouds");
         DestroyNamedChild(planetObject.transform, "PlanetAtmosphere");
+        DestroyNamedChild(planetObject.transform, "PlanetGlobeDepth");
     }
 
     static void DestroyNamedChild(Transform parent, string childName)
@@ -760,14 +829,13 @@ public sealed class FlightPlanetSphere : MonoBehaviour
                 mapSphereRoot.gameObject.SetActive(true);
             }
 
-            cloudLayers?.ApplyRenderLayer(true);
-            atmosphereSphere?.ApplyRenderLayer(true);
+            ApplyPngGlobeCompositing();
+            ApplyAtmosphereCloudVisuals();
         }
         else
         {
             UpdateAltitudeShellPresentation();
-            cloudLayers?.ApplyRenderLayer(false);
-            atmosphereSphere?.ApplyRenderLayer(false);
+            ApplyAtmosphereCloudVisuals();
         }
 
         DisableLegacyOceanSphere();
@@ -828,23 +896,62 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             }
 
             ApplyMapShellTint();
-            if (scaledSpaceMaterial != null)
-            {
-                scaledSpaceMaterial.SetFloat("_ZWrite", 1f);
-                scaledSpaceMaterial.SetOverrideTag("RenderType", "Opaque");
-            }
-
+            ApplyPngGlobeCompositing();
             SyncDistantShellPresentation();
+            if (ShouldUseDistantEarthWeather())
+            {
+                ApplyAtmosphereCloudVisuals();
+            }
         }
         else if (mapSphereRoot != null)
         {
             mapSphereRoot.gameObject.SetActive(false);
+            DestroyNamedChild(mapSphereRoot, "PlanetGlobeDepth");
         }
 
         if (chunksRoot != null)
         {
             chunksRoot.gameObject.SetActive(!hideChunks);
         }
+    }
+
+    void ApplyPngGlobeCompositing()
+    {
+        if (scaledSpaceMaterial == null)
+        {
+            return;
+        }
+
+        if (CelestialTerrainRuntime.IsMoon)
+        {
+            PlanetDistantVisualPolicy.ApplyMoonGlobeCompositing(scaledSpaceMaterial, mapModeActive);
+            return;
+        }
+
+        // LOD / map PNG is the geographic color globe. Keep it opaque with ZWrite
+        // so Cape/Moon starts still show earth_geographic. Distant flight Earth
+        // (other GameObject, or this LOD shell past ~1.5 Mm) turns ZWrite off so
+        // the 8 km cloud shell wins ZTest.
+        if (!mapModeActive && ShouldUseDistantEarthWeather())
+        {
+            PlanetDistantVisualPolicy.ApplyEarthColorGlobeCompositing(
+                scaledSpaceMaterial,
+                mapMode: false
+            );
+            return;
+        }
+
+        scaledSpaceMaterial.renderQueue = mapModeActive ?
+            (int)UnityEngine.Rendering.RenderQueue.Geometry :
+            PlanetDistantVisualPolicy.FlightDistantGlobeRenderQueue;
+        scaledSpaceMaterial.SetFloat("_ZWrite", 1f);
+        scaledSpaceMaterial.SetOverrideTag("RenderType", "Opaque");
+    }
+
+    bool ShouldUseDistantEarthWeather()
+    {
+        return !CelestialTerrainRuntime.IsMoon &&
+            PlanetDistantVisualPolicy.UsesDistantEarthWeather(viewerAltitudeMeters);
     }
 
     void ApplyMapShellTint()
@@ -1085,8 +1192,18 @@ public sealed class FlightPlanetSphere : MonoBehaviour
 
     void ApplyAtmosphereCloudVisuals()
     {
+        if (ShouldUseDistantEarthWeather() && cloudLayers != null)
+        {
+            cloudLayers.PreferNasaMapForDistantGlobe();
+        }
+
         cloudLayers?.ApplyRenderLayer(mapModeActive);
         atmosphereSphere?.ApplyRenderLayer(mapModeActive);
+
+        if (!mapModeActive && ShouldUseDistantEarthWeather())
+        {
+            atmosphereSphere?.ApplyDistantLimbLook();
+        }
     }
 
     void ApplyLodSettingsFromPrefs()
@@ -2252,6 +2369,7 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         if (existing != null)
         {
             cloudsObject = existing.gameObject;
+            cloudsObject.SetActive(true);
         }
         else
         {
@@ -2297,6 +2415,7 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         if (existing != null)
         {
             atmosphereObject = existing.gameObject;
+            atmosphereObject.SetActive(true);
         }
         else
         {
@@ -2385,9 +2504,6 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         }
 
         scaledSpaceMaterial.name = "PlanetScaledSpace";
-        scaledSpaceMaterial.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
-        scaledSpaceMaterial.SetFloat("_ZWrite", 1f);
-        scaledSpaceMaterial.SetOverrideTag("RenderType", "Opaque");
         scaledSpaceMaterial.SetTexture("_ColorMap", Texture2D.whiteTexture);
         scaledSpaceMaterial.SetColor("_ColorTint", new Color(1.1f, 1.1f, 1.1f, 1f));
         scaledSpaceMaterial.SetColor(
@@ -2411,6 +2527,8 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         {
             PlanetTerrainTextureResources.ApplyEarthColorShaderProperties(scaledSpaceMaterial);
         }
+
+        ApplyPngGlobeCompositing();
         return scaledSpaceMaterial;
     }
 

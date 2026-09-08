@@ -39,6 +39,8 @@ public sealed class GameSettingsGraphics
     public bool postAaEnabled;
     public int postAaMode = 1;
     public int postAaQuality = 1;
+    public int displayMode;
+    public int targetFrameRate;
 }
 
 [Serializable]
@@ -69,4 +71,5 @@ public sealed class GameSettingsPlay
 {
     public bool showTargetDirectionLine = true;
     public int lastScenario = (int)SimulationScenario.PlanetSurfaceStart;
+    public bool showLodLoadingScreen;
 }

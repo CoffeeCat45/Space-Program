@@ -118,6 +118,11 @@ public class SimulationHud : MonoBehaviour
 
     void OnGUI()
     {
+        if (FlightLodLoadingOverlay.IsBlocking)
+        {
+            return;
+        }
+
         if (runner != null)
         {
             runner.DrawPerformanceOverlayGui();
@@ -1098,12 +1103,18 @@ public class SimulationHud : MonoBehaviour
 
         if (sphereOfInfluenceEntryPreview.entersSphereOfInfluence)
         {
-            string soiLabel = sphereOfInfluenceEntryPreview.targetBodyName == "Sun" ?
-                "Sun SoI" :
-                "Moon SoI";
-            string timeLabel = sphereOfInfluenceEntryPreview.targetBodyName == "Sun" ?
-                "Time to Sun SoI" :
-                "Time to Moon SoI";
+            string soiLabel = "Moon SoI";
+            string timeLabel = "Time to Moon SoI";
+            if (sphereOfInfluenceEntryPreview.targetBodyName == "Sun")
+            {
+                soiLabel = "Sun SoI";
+                timeLabel = "Time to Sun SoI";
+            }
+            else if (sphereOfInfluenceEntryPreview.targetBodyName != "Moon")
+            {
+                soiLabel = "Earth SoI";
+                timeLabel = "Time to Earth SoI";
+            }
 
             DrawHudLabel(
                 FlightHudField.TargetSoiEncounter,

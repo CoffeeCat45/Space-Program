@@ -371,11 +371,6 @@ class SimulationPilotInput
             runner.FocusCameraOnShip();
         }
 
-        if (keyboard.nKey != null && keyboard.nKey.wasPressedThisFrame)
-        {
-            runner.SetManeuverNodeAtApoapsis();
-        }
-
         if (keyboard.tKey != null && keyboard.tKey.wasPressedThisFrame)
         {
             if (runner.IsMultiplayerMode)

@@ -21,7 +21,8 @@ public class SimulationScenarioMenu : MonoBehaviour
             runner == null ||
             !runner.IsInitialized ||
             runner.IsMainMenuVisible ||
-            runner.IsVabEditorActive
+            runner.IsVabEditorActive ||
+            FlightLodLoadingOverlay.IsBlocking
         )
         {
             return;

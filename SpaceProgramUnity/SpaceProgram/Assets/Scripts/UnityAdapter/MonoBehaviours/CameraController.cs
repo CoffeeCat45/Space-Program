@@ -8,8 +8,12 @@ public class CameraController : MonoBehaviour
     public float followSmoothness = 8.0f;
     public float doubleClickMaxDelay = 0.3f;
     public float orbitSensitivity = 0.2f;
-    public float minOrbitPitch = -80.0f;
-    public float maxOrbitPitch = 80.0f;
+    /// <summary>
+    /// Flight orbit pitch. Stay off ±90°: Euler yaw/pitch would flip at the pole.
+    /// ±80° blocked top/bottom ship views; ±89.5° matches map.
+    /// </summary>
+    public float minOrbitPitch = -89.5f;
+    public float maxOrbitPitch = 89.5f;
     public float mapMinOrbitPitch = -89.5f;
     public float mapMaxOrbitPitch = 89.5f;
     public float orbitDistanceScale = 1.0f;
@@ -172,7 +176,7 @@ public class CameraController : MonoBehaviour
         );
         orbitYaw = Mathf.Atan2(localOffset.x, -localOffset.z) * Mathf.Rad2Deg;
         orbitPitch = Mathf.Atan2(localOffset.y, horizontalDistance) * Mathf.Rad2Deg;
-        orbitPitch = Mathf.Clamp(orbitPitch, minOrbitPitch, maxOrbitPitch);
+        orbitPitch = Mathf.Clamp(orbitPitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
 
         float desiredDistance = offset.magnitude;
         float zoomDistance = Mathf.Max(0.01f, desiredDistance - autoBoundsRadius);

@@ -165,7 +165,8 @@ public class SimulationRunner : MonoBehaviour
         10.0,
         50.0,
         100.0,
-        1000.0
+        1000.0,
+        10000.0
     };
     string[] targetBodyNames = new string[] { "Moon", "Planet" };
     Dictionary<string, GameObject> bodyObjects = new Dictionary<string, GameObject>();
@@ -339,17 +340,9 @@ public class SimulationRunner : MonoBehaviour
         ShutdownActiveSession();
         SetStartupSessionMode(GameSessionMode.VabEditor);
 
-        if (!VabSessionSceneUtility.IsActiveSceneVab())
+        if (!VabSessionSceneUtility.TryLoadVabScene())
         {
-            if (!VabSessionSceneUtility.TryLoadVabScene())
-            {
-                SetStartupSessionMode(GameSessionMode.MainMenu);
-                return;
-            }
-
-            sessionMode = GameSessionMode.VabEditor;
-            EnsureVabEditorUi();
-            GameSessionBootstrap.SyncPresentationForRunner(this);
+            SetStartupSessionMode(GameSessionMode.MainMenu);
             return;
         }
 
@@ -426,6 +419,11 @@ public class SimulationRunner : MonoBehaviour
     public void TogglePauseMenu()
     {
         if (!isInitialized || sessionMode != GameSessionMode.Flight)
+        {
+            return;
+        }
+
+        if (FlightLodLoadingOverlay.IsBlocking)
         {
             return;
         }
@@ -985,6 +983,15 @@ public class SimulationRunner : MonoBehaviour
 
         simulationHud.SetRunner(this);
         EnsureTerrainGraphicsDebugPanel();
+        EnsureLodLoadingOverlay();
+    }
+
+    void EnsureLodLoadingOverlay()
+    {
+        if (GetComponent<FlightLodLoadingOverlay>() == null)
+        {
+            gameObject.AddComponent<FlightLodLoadingOverlay>();
+        }
     }
 
     void EnsureTerrainGraphicsDebugPanel()
@@ -1002,6 +1009,7 @@ public class SimulationRunner : MonoBehaviour
         isPauseMenuOpen = false;
         isMapModeActive = false;
         simulation = null;
+        FlightLodLoadingOverlay.HideActive();
 
         if (simulationHud != null)
         {
@@ -1620,6 +1628,7 @@ public class SimulationRunner : MonoBehaviour
         ApplyFlightUniverseVisualNow();
         SyncPlanetLodRuntime();
         PrimeLodTerrainAfterVisualReady();
+        FlightLodLoadingOverlay.NotifyFlightSessionStarted(this);
     }
 
     void PrimeLodTerrainAfterVisualReady()
@@ -2021,6 +2030,12 @@ public class SimulationRunner : MonoBehaviour
             return;
         }
 
+        if (FlightLodLoadingOverlay.IsBlocking)
+        {
+            ReturnToMainMenu();
+            return;
+        }
+
         if (
             earthSandboxSessionActive ||
             (EarthSandboxScene.IsActive() && EarthSandboxScene.EnteredFromMainMenu)
@@ -2090,9 +2105,13 @@ public class SimulationRunner : MonoBehaviour
 
         if (!isPauseMenuOpen)
         {
-            HandleMapModeToggle();
-            pilotInput.Update(this);
-            HandleQuickSaveLoadInput();
+            if (!FlightLodLoadingOverlay.IsBlocking)
+            {
+                HandleMapModeToggle();
+                pilotInput.Update(this);
+                HandleQuickSaveLoadInput();
+            }
+
             playSession.UpdateMissionPhase(scenario, simulation);
             ClampTimeScaleForActiveThrust();
 
@@ -2515,11 +2534,6 @@ public class SimulationRunner : MonoBehaviour
 
     void SyncPlanetLodRuntime()
     {
-        if (isMapModeActive)
-        {
-            return;
-        }
-
         if (
             bodyObjects == null ||
             !TryGetLodTerrainObject(out GameObject planetObject) ||
@@ -2544,6 +2558,12 @@ public class SimulationRunner : MonoBehaviour
             WorldVisualBridge.SimNormalToUnity(GetInterpolatedBodyFixedUnderShip()),
             GetShipSurfaceRelativeVelocitySimUnity()
         );
+
+        if (isMapModeActive)
+        {
+            return;
+        }
+
         planetSphere.SetPlanetSpinLongitudeRadians(GetPlanetVisualSpinLongitudeRadians());
         TryRefreshLaunchSiteTerrainGrounding();
     }
@@ -3171,7 +3191,7 @@ public class SimulationRunner : MonoBehaviour
 
         if (ShouldUseLargeCoastWarpSteps() && effectiveTimeScale > 1.01)
         {
-            return 4;
+            return effectiveTimeScale >= 10000.0 ? 6 : 4;
         }
 
         if (IsWarping() || effectiveTimeScale > 4.0)
@@ -3195,6 +3215,11 @@ public class SimulationRunner : MonoBehaviour
         }
 
         double scale = GetEffectiveTimeScale();
+
+        if (scale >= 10000.0)
+        {
+            return 120.0;
+        }
 
         if (scale >= 1000.0)
         {
@@ -4744,7 +4769,12 @@ public class SimulationRunner : MonoBehaviour
             return "Sun SoI";
         }
 
-        return "Moon SoI";
+        if (targetBodyName == "Moon")
+        {
+            return "Moon SoI";
+        }
+
+        return "Earth SoI";
     }
 
     internal bool HasManeuverNode()
@@ -5359,6 +5389,11 @@ public class SimulationRunner : MonoBehaviour
         }
 
         if (TryFinishPendingPreviewSoI())
+        {
+            return;
+        }
+
+        if (isPaused && hasCachedPreviewAnalysis && !PlannedDeltaVChanged())
         {
             return;
         }
@@ -5988,11 +6023,7 @@ public class SimulationRunner : MonoBehaviour
 
             if (planetSphere != null)
             {
-                if (isMapModeActive)
-                {
-                    planetSphere.SetMapModeActive(true);
-                }
-
+                planetSphere.ApplyPresentationAfterSoISwap(isMapModeActive);
                 planetSphere.RequestViewerLodBootstrap();
             }
         }
@@ -6472,13 +6503,16 @@ public class SimulationRunner : MonoBehaviour
                 lastShipLayoutRevision = -1;
             }
 
-            RenderVesselBlockVisual(
-                bodyObjects[bodyState.name],
-                simulation.ship,
-                ref lastShipLayoutRevision,
-                simulation.ship.IsDocked,
-                GetShipVisualCenterOfMassLocal()
-            );
+            if (!isMapModeActive)
+            {
+                RenderVesselBlockVisual(
+                    bodyObjects[bodyState.name],
+                    simulation.ship,
+                    ref lastShipLayoutRevision,
+                    simulation.ship.IsDocked,
+                    GetShipVisualCenterOfMassLocal()
+                );
+            }
 
             if (isMapModeActive)
             {
@@ -6549,7 +6583,8 @@ public class SimulationRunner : MonoBehaviour
 
             BodyView.UpdateEngineExhaust(
                 bodyObjects[bodyState.name],
-                GetThrottle(),
+                isMapModeActive ? 0.0f : GetThrottle(),
+                !isMapModeActive &&
                 ShouldShowEngineExhaustForVesselName(bodyState.name)
             );
 
@@ -6607,11 +6642,14 @@ public class SimulationRunner : MonoBehaviour
                 simulation.GetShipSurfaceUp()
             );
 
-            RenderVesselBlockVisual(
-                bodyObjects[bodyState.name],
-                dockableVessel,
-                ref lastStationLayoutRevision
-            );
+            if (!isMapModeActive)
+            {
+                RenderVesselBlockVisual(
+                    bodyObjects[bodyState.name],
+                    dockableVessel,
+                    ref lastStationLayoutRevision
+                );
+            }
 
             if (isMapModeActive)
             {
@@ -6641,7 +6679,8 @@ public class SimulationRunner : MonoBehaviour
 
             BodyView.UpdateEngineExhaust(
                 bodyObjects[bodyState.name],
-                GetThrottle(),
+                isMapModeActive ? 0.0f : GetThrottle(),
+                !isMapModeActive &&
                 ShouldShowEngineExhaustForVesselName(bodyState.name)
             );
             BodyView.UpdateFocusPickCollider(

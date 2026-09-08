@@ -37,6 +37,7 @@ static class VabSetupDiagnostics
         {
             "VabScene",
             "VABScene",
+            "VABlvl3",
             "vablvl3",
             "vablvl",
         };

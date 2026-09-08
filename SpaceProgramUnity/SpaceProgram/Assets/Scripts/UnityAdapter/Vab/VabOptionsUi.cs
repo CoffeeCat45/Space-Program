@@ -18,6 +18,9 @@ public class VabOptionsUi : MonoBehaviour
 
     const int PostModeDropdownFxaa = 0;
     const int PostModeDropdownSmaa = 1;
+    const int DisplayModeDropdownWindowed = 0;
+    const int DisplayModeDropdownExclusive = 1;
+    const int DisplayModeDropdownBorderless = 2;
     const int CloudRendererDropdownSimple = 0;
     const int CloudRendererDropdownExperimental = 1;
     const int CloudRendererDropdownNasa = 2;
@@ -30,7 +33,12 @@ public class VabOptionsUi : MonoBehaviour
     static readonly Color ControlBackground = new Color(0.16f, 0.19f, 0.24f, 1f);
     static readonly Color ControlBorder = new Color(0.34f, 0.42f, 0.52f, 1f);
     static readonly Color LabelColor = new Color(0.95f, 0.97f, 1f, 1f);
-    static readonly Color MutedLabelColor = new Color(0.78f, 0.84f, 0.92f, 1f);
+    static readonly Color MutedLabelColor = new Color(0.72f, 0.78f, 0.86f, 1f);
+    static readonly Color SectionRuleColor = new Color(0.42f, 0.52f, 0.64f, 0.55f);
+    static readonly Color DropdownPanelColor = new Color(0.16f, 0.20f, 0.26f, 0.98f);
+    static readonly Color DropdownItemColor = new Color(0.18f, 0.22f, 0.28f, 1f);
+    static readonly Color DropdownItemHighlight = new Color(0.26f, 0.34f, 0.46f, 1f);
+    static readonly Color DropdownItemSelected = new Color(0.22f, 0.40f, 0.58f, 1f);
     static readonly Color CheckmarkColor = new Color(0.35f, 0.92f, 0.55f, 1f);
     static readonly Color PrimaryButtonColor = new Color(0.20f, 0.42f, 0.62f, 1f);
     static readonly Color SecondaryButtonColor = new Color(0.18f, 0.21f, 0.27f, 1f);
@@ -63,8 +71,19 @@ public class VabOptionsUi : MonoBehaviour
     [SerializeField]
     Dropdown postAaQualityDropdown;
 
+    Text postAaQualityLabel;
+
+    [SerializeField]
+    Dropdown displayModeDropdown;
+
+    [SerializeField]
+    InputField targetFrameRateInput;
+
     [SerializeField]
     Toggle showTargetLineToggle;
+
+    [SerializeField]
+    Toggle lodLoadingScreenToggle;
 
     [SerializeField]
     Slider terrainLodDistanceSlider;
@@ -238,6 +257,10 @@ public class VabOptionsUi : MonoBehaviour
         {
             VabGraphicsManager.ApplySnapshot(saved);
         }
+        else
+        {
+            VabGraphicsManager.ApplyTargetFrameRate(VabGraphicsManager.GetTargetFrameRate());
+        }
     }
 
     void EnsureUiBuilt()
@@ -309,7 +332,11 @@ public class VabOptionsUi : MonoBehaviour
         postAaToggle = null;
         postAaModeDropdown = null;
         postAaQualityDropdown = null;
+        postAaQualityLabel = null;
+        displayModeDropdown = null;
+        targetFrameRateInput = null;
         showTargetLineToggle = null;
+        lodLoadingScreenToggle = null;
         terrainLodDistanceSlider = null;
         terrainLoadSpeedSlider = null;
         terrainMaxLodSlider = null;
@@ -421,9 +448,24 @@ public class VabOptionsUi : MonoBehaviour
             postAaQualityDropdown.onValueChanged.AddListener(OnPostAaQualityDropdownChanged);
         }
 
+        if (displayModeDropdown != null)
+        {
+            displayModeDropdown.onValueChanged.AddListener(OnDisplayModeDropdownChanged);
+        }
+
+        if (targetFrameRateInput != null)
+        {
+            targetFrameRateInput.onEndEdit.AddListener(OnTargetFrameRateInputChanged);
+        }
+
         if (showTargetLineToggle != null)
         {
             showTargetLineToggle.onValueChanged.AddListener(OnShowTargetLineToggleChanged);
+        }
+
+        if (lodLoadingScreenToggle != null)
+        {
+            lodLoadingScreenToggle.onValueChanged.AddListener(OnLodLoadingScreenToggleChanged);
         }
 
         if (terrainLodDistanceSlider != null)
@@ -527,36 +569,56 @@ public class VabOptionsUi : MonoBehaviour
     {
         suppressUiEvents = true;
 
-        int msaaLevel = VabGraphicsManager.GetMsaaLevel();
+        VabGraphicsManager.GraphicsSettingsSnapshot snapshot =
+            VabGraphicsManager.TryLoadSnapshot(out VabGraphicsManager.GraphicsSettingsSnapshot saved)
+                ? saved
+                : VabGraphicsManager.ReadCurrentSnapshot();
+
         if (msaaToggle != null)
         {
-            msaaToggle.isOn = msaaLevel != VabGraphicsManager.MsaaDisabled;
+            msaaToggle.isOn = snapshot.msaaEnabled;
         }
 
         if (msaaLevelDropdown != null)
         {
-            msaaLevelDropdown.value = MsaaLevelToDropdownIndex(msaaLevel);
+            msaaLevelDropdown.value = MsaaLevelToDropdownIndex(snapshot.msaaLevel);
         }
 
-        int postMode = VabGraphicsManager.GetPostAntiAliasingMode();
         if (postAaToggle != null)
         {
-            postAaToggle.isOn = postMode != VabGraphicsManager.PostAaModeNone;
+            postAaToggle.isOn = snapshot.postAaEnabled;
         }
 
         if (postAaModeDropdown != null)
         {
-            postAaModeDropdown.value = PostModeToDropdownIndex(postMode);
+            postAaModeDropdown.value = PostModeToDropdownIndex(snapshot.postAaMode);
         }
 
         if (postAaQualityDropdown != null)
         {
-            postAaQualityDropdown.value = VabGraphicsManager.GetPostAntiAliasingQuality();
+            postAaQualityDropdown.value = snapshot.postAaQuality;
+        }
+
+        if (displayModeDropdown != null)
+        {
+            displayModeDropdown.value = DisplayModeToDropdownIndex(snapshot.displayMode);
+        }
+
+        if (targetFrameRateInput != null)
+        {
+            targetFrameRateInput.SetTextWithoutNotify(
+                VabGraphicsManager.ClampTargetFrameRate(snapshot.targetFrameRate).ToString()
+            );
         }
 
         if (showTargetLineToggle != null)
         {
             showTargetLineToggle.isOn = GameViewSettings.ShowTargetDirectionLine;
+        }
+
+        if (lodLoadingScreenToggle != null)
+        {
+            lodLoadingScreenToggle.isOn = GameViewSettings.ShowLodLoadingScreen;
         }
 
         SyncTerrainGraphicsSlidersFromSettings();
@@ -754,6 +816,7 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         RefreshDependentControls();
+        PersistGraphicsQualityFromUi();
     }
 
     void OnMsaaLevelDropdownChanged(int dropdownIndex)
@@ -769,6 +832,7 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         VabGraphicsManager.SetMsaaLevel(DropdownIndexToMsaaLevel(dropdownIndex));
+        PersistGraphicsQualityFromUi();
     }
 
     void OnPostAaToggleChanged(bool enabled)
@@ -780,6 +844,7 @@ public class VabOptionsUi : MonoBehaviour
 
         ApplyPostAntiAliasing();
         RefreshDependentControls();
+        PersistGraphicsQualityFromUi();
     }
 
     void OnPostAaModeDropdownChanged(int dropdownIndex)
@@ -790,6 +855,8 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         ApplyPostAntiAliasing();
+        RefreshDependentControls();
+        PersistGraphicsQualityFromUi();
     }
 
     void OnPostAaQualityDropdownChanged(int qualityIndex)
@@ -800,6 +867,60 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         ApplyPostAntiAliasing();
+        PersistGraphicsQualityFromUi();
+    }
+
+    void OnDisplayModeDropdownChanged(int dropdownIndex)
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        VabGraphicsManager.ApplyDisplayMode(DropdownIndexToDisplayMode(dropdownIndex));
+        PersistGraphicsQualityFromUi();
+    }
+
+    void OnTargetFrameRateInputChanged(string value)
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        int framesPerSecond = ParseTargetFrameRateInput(value);
+        if (targetFrameRateInput != null)
+        {
+            targetFrameRateInput.SetTextWithoutNotify(framesPerSecond.ToString());
+        }
+
+        VabGraphicsManager.ApplyTargetFrameRate(framesPerSecond);
+        PersistGraphicsQualityFromUi();
+    }
+
+    int ReadTargetFrameRateFromUi()
+    {
+        if (targetFrameRateInput == null)
+        {
+            return VabGraphicsManager.GetTargetFrameRate();
+        }
+
+        return ParseTargetFrameRateInput(targetFrameRateInput.text);
+    }
+
+    static int ParseTargetFrameRateInput(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 0;
+        }
+
+        if (!int.TryParse(value.Trim(), out int framesPerSecond))
+        {
+            return 0;
+        }
+
+        return VabGraphicsManager.ClampTargetFrameRate(framesPerSecond);
     }
 
     void ApplyPostAntiAliasing()
@@ -824,6 +945,12 @@ public class VabOptionsUi : MonoBehaviour
         VabGraphicsManager.SetPostAntiAliasing(modeIndex, qualityIndex);
     }
 
+    void PersistGraphicsQualityFromUi()
+    {
+        ApplyCurrentUiToGpu();
+        VabGraphicsManager.SaveSnapshot(ReadSnapshotFromUi());
+    }
+
     void OnShowTargetLineToggleChanged(bool enabled)
     {
         if (suppressUiEvents)
@@ -832,6 +959,16 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         GameViewSettings.SetShowTargetDirectionLine(enabled);
+    }
+
+    void OnLodLoadingScreenToggleChanged(bool enabled)
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        GameViewSettings.SetShowLodLoadingScreen(enabled);
     }
 
     void OnTerrainLodDistanceSliderChanged(float value)
@@ -1027,6 +1164,11 @@ public class VabOptionsUi : MonoBehaviour
             GameViewSettings.SetShowTargetDirectionLine(showTargetLineToggle.isOn);
         }
 
+        if (lodLoadingScreenToggle != null)
+        {
+            GameViewSettings.SetShowLodLoadingScreen(lodLoadingScreenToggle.isOn);
+        }
+
         PlanetLodSettings.Save();
         FlightPlanetSphere.ApplyRuntimeLodSettings();
         FlightPlanetSphere.ApplyRuntimeCloudSettings();
@@ -1046,6 +1188,12 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         ApplyPostAntiAliasing();
+        VabGraphicsManager.ApplyDisplayMode(
+            DropdownIndexToDisplayMode(
+                displayModeDropdown != null ? displayModeDropdown.value : DisplayModeDropdownWindowed
+            )
+        );
+        VabGraphicsManager.ApplyTargetFrameRate(ReadTargetFrameRateFromUi());
     }
 
     VabGraphicsManager.GraphicsSettingsSnapshot ReadSnapshotFromUi()
@@ -1067,6 +1215,10 @@ public class VabOptionsUi : MonoBehaviour
             postAaQuality = postAaQualityDropdown != null
                 ? postAaQualityDropdown.value
                 : VabGraphicsManager.PostAaQualityMedium,
+            displayMode = DropdownIndexToDisplayMode(
+                displayModeDropdown != null ? displayModeDropdown.value : DisplayModeDropdownWindowed
+            ),
+            targetFrameRate = ReadTargetFrameRateFromUi(),
         };
     }
 
@@ -1080,16 +1232,28 @@ public class VabOptionsUi : MonoBehaviour
         }
 
         bool postEnabled = postAaToggle != null && postAaToggle.isOn;
+        bool smaaSelected =
+            postEnabled &&
+            postAaModeDropdown != null &&
+            DropdownIndexToPostMode(postAaModeDropdown.value) ==
+            VabGraphicsManager.PostAaModeSmaa;
+
         if (postAaModeDropdown != null)
         {
             postAaModeDropdown.interactable = postEnabled;
             SetDropdownMuted(postAaModeDropdown, !postEnabled);
         }
 
+        if (postAaQualityLabel != null)
+        {
+            postAaQualityLabel.gameObject.SetActive(smaaSelected);
+        }
+
         if (postAaQualityDropdown != null)
         {
-            postAaQualityDropdown.interactable = postEnabled;
-            SetDropdownMuted(postAaQualityDropdown, !postEnabled);
+            postAaQualityDropdown.gameObject.SetActive(smaaSelected);
+            postAaQualityDropdown.interactable = smaaSelected;
+            SetDropdownMuted(postAaQualityDropdown, !smaaSelected);
         }
 
         RefreshCloudLookControls();
@@ -1123,6 +1287,11 @@ public class VabOptionsUi : MonoBehaviour
                 ? "NASA PNG+: та же clouds-alpha.png. Ветер на восток, два слоя без двоения. Без переворота полушарий."
                 : "NASA PNG: StreamingAssets/MapMode/clouds-alpha.png. Equirect, geographic UV, без ветра.";
         }
+
+        if (isPanelOpen)
+        {
+            RebuildSettingsLayout();
+        }
     }
 
     void SetPanelOpen(bool open)
@@ -1132,22 +1301,45 @@ public class VabOptionsUi : MonoBehaviour
         if (canvasRoot != null)
         {
             canvasRoot.SetActive(open);
+        }
+        else
+        {
+            if (optionsPanel != null)
+            {
+                optionsPanel.SetActive(open);
+            }
+
+            if (modalBlocker != null)
+            {
+                modalBlocker.SetActive(open);
+            }
+        }
+
+        if (open)
+        {
+            RebuildSettingsLayout();
+        }
+        else
+        {
+            ClearStatus();
+        }
+    }
+
+    void RebuildSettingsLayout()
+    {
+        ScrollRect scrollRect = optionsPanel != null
+            ? optionsPanel.GetComponentInChildren<ScrollRect>(true)
+            : null;
+        if (scrollRect == null || scrollRect.content == null)
+        {
             return;
         }
 
-        if (optionsPanel != null)
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+        if (optionsPanel.transform is RectTransform panelRect)
         {
-            optionsPanel.SetActive(open);
-        }
-
-        if (modalBlocker != null)
-        {
-            modalBlocker.SetActive(open);
-        }
-
-        if (!open)
-        {
-            ClearStatus();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panelRect);
         }
     }
 
@@ -1253,46 +1445,72 @@ public class VabOptionsUi : MonoBehaviour
 
         Transform settingsContent = CreateSettingsScrollArea(optionsPanel.transform);
 
+        CreateSectionHeader(settingsContent, "Экран");
+        Transform screenBody = CreateSectionBody(settingsContent);
+        CreateFieldLabel(screenBody, "Режим окна");
+        displayModeDropdown = CreateStyledDropdown(screenBody, -1f);
+        SetDropdownOptions(
+            displayModeDropdown,
+            "Оконный",
+            "Полноэкранный",
+            "Полноэкранное окно"
+        );
+        displayModeDropdown.value = DisplayModeDropdownWindowed;
+
+        CreateFieldLabel(screenBody, "Ограничение FPS (0 или >400 — без ограничения)");
+        targetFrameRateInput = CreateStyledInputField(screenBody);
+        if (targetFrameRateInput != null)
+        {
+            targetFrameRateInput.contentType = InputField.ContentType.IntegerNumber;
+            targetFrameRateInput.characterLimit = 4;
+            targetFrameRateInput.text = "0";
+        }
+
+        CreateSectionHeader(settingsContent, "Сглаживание");
+        Transform antiAliasBody = CreateSectionBody(settingsContent);
         msaaToggle = CreateSettingRow(
-            settingsContent,
-            "Включить геометрическое сглаживание (MSAA)",
+            antiAliasBody,
+            "Геометрическое сглаживание (MSAA)",
             out msaaLevelDropdown,
-            168f
+            140f
         );
         SetDropdownOptions(msaaLevelDropdown, "2x", "4x", "8x");
         msaaLevelDropdown.value = MsaaDropdown4x;
 
         postAaToggle = CreateSettingRow(
-            settingsContent,
-            "Включить экранное сглаживание (Пост-эффект)",
+            antiAliasBody,
+            "Экранное сглаживание (пост-эффект)",
             out postAaModeDropdown,
             196f
         );
         SetDropdownOptions(postAaModeDropdown, "FXAA (Четко)", "SMAA (Гладко)");
 
-        CreateCaptionLabel(settingsContent, "Качество пост-эффекта");
-        postAaQualityDropdown = CreateStyledDropdown(settingsContent, -1f);
+        postAaQualityLabel = CreateFieldLabel(antiAliasBody, "Качество SMAA");
+        postAaQualityDropdown = CreateStyledDropdown(antiAliasBody, -1f);
         SetDropdownOptions(postAaQualityDropdown, "Низкое", "Среднее", "Высокое");
         postAaQualityDropdown.value = VabGraphicsManager.PostAaQualityMedium;
 
-        CreateCaptionLabel(settingsContent, "Отображение");
+        CreateSectionHeader(settingsContent, "Отображение");
+        Transform viewBody = CreateSectionBody(settingsContent);
         showTargetLineToggle = CreateToggleOnlyRow(
-            settingsContent,
+            viewBody,
             "Линия к цели"
         );
         showTargetLineToggle.isOn = GameViewSettings.ShowTargetDirectionLine;
 
-        CreateCaptionLabel(settingsContent, "HUD полёта");
+        CreateSectionHeader(settingsContent, "HUD полёта");
+        Transform hudBody = CreateSectionBody(settingsContent);
         hudSettingsButton = CreateStyledButton(
-            settingsContent,
+            hudBody,
             "Настройки HUD",
             PrimaryButtonColor,
             flexible: true
         );
 
-        CreateCaptionLabel(settingsContent, "Ландшафт (LOD)");
+        CreateSectionHeader(settingsContent, "Ландшафт (LOD)");
+        Transform terrainBody = CreateSectionBody(settingsContent);
         terrainLodDistanceSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            terrainBody,
             "LOD Distance (wider)",
             FlightPlanetTerrainTuning.LodDistanceFactorMin,
             FlightPlanetTerrainTuning.LodDistanceFactorMax,
@@ -1300,7 +1518,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainLodDistanceValueLabel
         );
         terrainLoadSpeedSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            terrainBody,
             "Load Speed (deeper)",
             FlightPlanetTerrainTuning.LoadSpeedMin,
             FlightPlanetTerrainTuning.LoadSpeedMax,
@@ -1308,7 +1526,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainLoadSpeedValueLabel
         );
         terrainMaxLodSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            terrainBody,
             "Max LOD (ground detail)",
             FlightPlanetTerrainTuning.MaxLodMin,
             FlightPlanetSphere.DefaultMaxLodLevel,
@@ -1316,7 +1534,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainMaxLodValueLabel
         );
         terrainViewConeSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            terrainBody,
             "View Width (look cone)",
             FlightPlanetTerrainTuning.ViewConeHalfAngleMin,
             FlightPlanetTerrainTuning.ViewConeHalfAngleMax,
@@ -1324,9 +1542,10 @@ public class VabOptionsUi : MonoBehaviour
             out terrainViewConeValueLabel
         );
 
-        CreateCaptionLabel(settingsContent, "Облака");
-        CreateCaptionLabel(settingsContent, "Рендер облаков");
-        cloudRendererDropdown = CreateStyledDropdown(settingsContent, -1f);
+        CreateSectionHeader(settingsContent, "Облака");
+        Transform cloudsBody = CreateSectionBody(settingsContent);
+        CreateFieldLabel(cloudsBody, "Рендер облаков");
+        cloudRendererDropdown = CreateStyledDropdown(cloudsBody, -1f);
         SetDropdownOptions(
             cloudRendererDropdown,
             "Простые оболочки",
@@ -1336,7 +1555,7 @@ public class VabOptionsUi : MonoBehaviour
         );
 
         terrainCloudDetailSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Cloud detail (light → rich)",
             FlightPlanetTerrainTuning.CloudDetailMin,
             FlightPlanetTerrainTuning.CloudDetailMax,
@@ -1344,7 +1563,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainCloudDetailValueLabel
         );
         terrainCloudCoverageSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Cloud coverage / густота",
             FlightPlanetTerrainTuning.CloudCoverageMin,
             FlightPlanetTerrainTuning.CloudCoverageMax,
@@ -1352,7 +1571,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainCloudCoverageValueLabel
         );
         terrainCloudFrequencySlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Cloud frequency / частота",
             FlightPlanetTerrainTuning.CloudFrequencyMin,
             FlightPlanetTerrainTuning.CloudFrequencyMax,
@@ -1360,7 +1579,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainCloudFrequencyValueLabel
         );
         terrainCloudClusterSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Cloud clusters / скопления",
             FlightPlanetTerrainTuning.CloudClusterMin,
             FlightPlanetTerrainTuning.CloudClusterMax,
@@ -1368,7 +1587,7 @@ public class VabOptionsUi : MonoBehaviour
             out terrainCloudClusterValueLabel
         );
         expCloudCoverageSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp coverage / густота масс",
             FlightPlanetTerrainTuning.ExpCloudCoverageMin,
             FlightPlanetTerrainTuning.ExpCloudCoverageMax,
@@ -1376,7 +1595,7 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudCoverageValueLabel
         );
         expCloudFlowSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp flow / потоки",
             FlightPlanetTerrainTuning.ExpCloudFlowMin,
             FlightPlanetTerrainTuning.ExpCloudFlowMax,
@@ -1384,7 +1603,7 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudFlowValueLabel
         );
         expCloudVortexSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp vortex / вихри",
             FlightPlanetTerrainTuning.ExpCloudVortexMin,
             FlightPlanetTerrainTuning.ExpCloudVortexMax,
@@ -1392,7 +1611,7 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudVortexValueLabel
         );
         expCloudGrainSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp grain / кайма барашки",
             FlightPlanetTerrainTuning.ExpCloudGrainMin,
             FlightPlanetTerrainTuning.ExpCloudGrainMax,
@@ -1400,7 +1619,7 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudGrainValueLabel
         );
         expCloudMassScaleSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp mass scale / размер масс",
             FlightPlanetTerrainTuning.ExpCloudMassScaleMin,
             FlightPlanetTerrainTuning.ExpCloudMassScaleMax,
@@ -1408,7 +1627,7 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudMassScaleValueLabel
         );
         expCloudSoftnessSlider = CreateTerrainGraphicsSlider(
-            settingsContent,
+            cloudsBody,
             "Exp softness / мягкость",
             FlightPlanetTerrainTuning.ExpCloudSoftnessMin,
             FlightPlanetTerrainTuning.ExpCloudSoftnessMax,
@@ -1416,18 +1635,30 @@ public class VabOptionsUi : MonoBehaviour
             out expCloudSoftnessValueLabel
         );
         experimentalCloudHint = CreateHintLabel(
-            settingsContent,
+            cloudsBody,
             "Экспериментальный: густота / потоки / вихри / кайма / размер масс / мягкость. Ползунки простых оболочек сохраняются."
         );
         nasaCloudHint = CreateHintLabel(
-            settingsContent,
+            cloudsBody,
             "NASA PNG: StreamingAssets/MapMode/clouds-alpha.png. Equirect, geographic UV, без ветра."
         );
         CreateHintLabel(
-            settingsContent,
+            cloudsBody,
             "Те же параметры, что и в панели Terrain Graphics в полёте. Изменения применяются сразу и сохраняются после перезапуска."
         );
         RefreshCloudLookControls();
+
+        CreateSectionHeader(settingsContent, "Загрузка");
+        Transform loadingBody = CreateSectionBody(settingsContent);
+        lodLoadingScreenToggle = CreateToggleOnlyRow(
+            loadingBody,
+            "Экран загрузки ландшафта"
+        );
+        lodLoadingScreenToggle.isOn = GameViewSettings.ShowLodLoadingScreen;
+        CreateHintLabel(
+            loadingBody,
+            "Выкл — мир виден сразу. Вкл — сначала LOD на паде, потом показ."
+        );
 
         statusLabel = CreateStatusLabel(optionsPanel.transform);
         CreateFooterButtons(optionsPanel.transform, out saveButton, out closeButton);
@@ -1474,10 +1705,10 @@ public class VabOptionsUi : MonoBehaviour
         contentRect.sizeDelta = new Vector2(0f, 0f);
 
         VerticalLayoutGroup contentLayout = content.AddComponent<VerticalLayoutGroup>();
-        contentLayout.spacing = 12f;
+        contentLayout.spacing = 8f;
         contentLayout.childAlignment = TextAnchor.UpperLeft;
         contentLayout.childControlWidth = true;
-        contentLayout.childControlHeight = false;
+        contentLayout.childControlHeight = true;
         contentLayout.childForceExpandWidth = true;
         contentLayout.childForceExpandHeight = false;
 
@@ -1616,21 +1847,86 @@ public class VabOptionsUi : MonoBehaviour
         label.color = LabelColor;
     }
 
-    static void CreateCaptionLabel(Transform parent, string text)
+    static void CreateSectionHeader(Transform parent, string text)
     {
-        GameObject labelObject = new GameObject("Caption");
-        labelObject.transform.SetParent(parent, false);
+        GameObject headerObject = new GameObject("SectionHeader");
+        headerObject.transform.SetParent(parent, false);
 
-        LayoutElement layout = labelObject.AddComponent<LayoutElement>();
-        layout.minHeight = 28f;
-        layout.preferredHeight = 28f;
+        LayoutElement headerSize = headerObject.AddComponent<LayoutElement>();
+        headerSize.minHeight = 46f;
+        headerSize.preferredHeight = 46f;
+        headerSize.flexibleHeight = 0f;
+
+        VerticalLayoutGroup headerLayout = headerObject.AddComponent<VerticalLayoutGroup>();
+        headerLayout.padding = new RectOffset(0, 0, 10, 2);
+        headerLayout.spacing = 6f;
+        headerLayout.childAlignment = TextAnchor.UpperLeft;
+        headerLayout.childControlWidth = true;
+        headerLayout.childControlHeight = true;
+        headerLayout.childForceExpandWidth = true;
+        headerLayout.childForceExpandHeight = false;
+
+        GameObject labelObject = new GameObject("Label");
+        labelObject.transform.SetParent(headerObject.transform, false);
+
+        LayoutElement labelLayout = labelObject.AddComponent<LayoutElement>();
+        labelLayout.minHeight = 22f;
+        labelLayout.preferredHeight = 22f;
 
         Text label = labelObject.AddComponent<Text>();
         label.font = uiFont;
         label.text = text;
-        label.fontSize = 18;
+        label.fontSize = 20;
+        label.fontStyle = FontStyle.Bold;
         label.alignment = TextAnchor.MiddleLeft;
         label.color = LabelColor;
+
+        GameObject ruleObject = new GameObject("Rule");
+        ruleObject.transform.SetParent(headerObject.transform, false);
+
+        LayoutElement ruleLayout = ruleObject.AddComponent<LayoutElement>();
+        ruleLayout.minHeight = 1f;
+        ruleLayout.preferredHeight = 1f;
+
+        Image rule = ruleObject.AddComponent<Image>();
+        rule.color = SectionRuleColor;
+        rule.raycastTarget = false;
+    }
+
+    static Transform CreateSectionBody(Transform parent)
+    {
+        GameObject bodyObject = new GameObject("SectionBody");
+        bodyObject.transform.SetParent(parent, false);
+
+        VerticalLayoutGroup group = bodyObject.AddComponent<VerticalLayoutGroup>();
+        group.padding = new RectOffset(14, 0, 4, 8);
+        group.spacing = 8f;
+        group.childAlignment = TextAnchor.UpperLeft;
+        group.childControlWidth = true;
+        group.childControlHeight = true;
+        group.childForceExpandWidth = true;
+        group.childForceExpandHeight = false;
+
+        return bodyObject.transform;
+    }
+
+    static Text CreateFieldLabel(Transform parent, string text)
+    {
+        GameObject labelObject = new GameObject("FieldLabel");
+        labelObject.transform.SetParent(parent, false);
+
+        LayoutElement layout = labelObject.AddComponent<LayoutElement>();
+        layout.minHeight = 18f;
+        layout.preferredHeight = 18f;
+
+        Text label = labelObject.AddComponent<Text>();
+        label.font = uiFont;
+        label.text = text;
+        label.fontSize = 14;
+        label.alignment = TextAnchor.MiddleLeft;
+        label.color = MutedLabelColor;
+        label.supportRichText = false;
+        return label;
     }
 
     static Text CreateHintLabel(Transform parent, string text)
@@ -1639,8 +1935,8 @@ public class VabOptionsUi : MonoBehaviour
         labelObject.transform.SetParent(parent, false);
 
         LayoutElement layout = labelObject.AddComponent<LayoutElement>();
-        layout.minHeight = 52f;
-        layout.preferredHeight = 52f;
+        layout.minHeight = 40f;
+        layout.preferredHeight = 40f;
         layout.flexibleHeight = 0f;
 
         Text label = labelObject.AddComponent<Text>();
@@ -1810,6 +2106,49 @@ public class VabOptionsUi : MonoBehaviour
         return dropdown;
     }
 
+    static InputField CreateStyledInputField(Transform parent)
+    {
+        DefaultControls.Resources resources = GetUiResources();
+        GameObject fieldObject = DefaultControls.CreateInputField(resources);
+        fieldObject.name = "InputField";
+        fieldObject.transform.SetParent(parent, false);
+
+        LayoutElement layout = fieldObject.AddComponent<LayoutElement>();
+        layout.minHeight = 40f;
+        layout.preferredHeight = 40f;
+        layout.flexibleWidth = 1f;
+        layout.minWidth = 120f;
+
+        Image background = fieldObject.GetComponent<Image>();
+        if (background != null)
+        {
+            background.color = ControlBackground;
+        }
+
+        InputField input = fieldObject.GetComponent<InputField>();
+        if (input != null)
+        {
+            if (input.textComponent != null)
+            {
+                input.textComponent.font = uiFont;
+                input.textComponent.fontSize = 17;
+                input.textComponent.color = LabelColor;
+                input.textComponent.alignment = TextAnchor.MiddleLeft;
+                input.textComponent.supportRichText = false;
+            }
+
+            if (input.placeholder is Text placeholder)
+            {
+                placeholder.font = uiFont;
+                placeholder.fontSize = 17;
+                placeholder.color = MutedLabelColor;
+                placeholder.text = "0";
+            }
+        }
+
+        return input;
+    }
+
     static void EnsureDropdownCaptionLayout(Transform dropdownRoot)
     {
         Transform label = dropdownRoot.Find("Label");
@@ -1840,9 +2179,10 @@ public class VabOptionsUi : MonoBehaviour
         if (dropdown.captionText != null)
         {
             dropdown.captionText.font = uiFont;
-            dropdown.captionText.fontSize = 17;
+            dropdown.captionText.fontSize = 16;
             dropdown.captionText.color = LabelColor;
             dropdown.captionText.alignment = TextAnchor.MiddleLeft;
+            dropdown.captionText.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
 
         if (dropdown.itemText != null)
@@ -1850,6 +2190,7 @@ public class VabOptionsUi : MonoBehaviour
             dropdown.itemText.font = uiFont;
             dropdown.itemText.fontSize = 16;
             dropdown.itemText.color = LabelColor;
+            dropdown.itemText.alignment = TextAnchor.MiddleLeft;
         }
 
         Transform arrow = dropdown.transform.Find("Arrow");
@@ -1864,9 +2205,9 @@ public class VabOptionsUi : MonoBehaviour
             Text arrowText = GetOrCreateDropdownArrowLabel(arrow);
             arrowText.font = uiFont;
             arrowText.text = "▾";
-            arrowText.fontSize = 18;
+            arrowText.fontSize = 16;
             arrowText.alignment = TextAnchor.MiddleCenter;
-            arrowText.color = LabelColor;
+            arrowText.color = MutedLabelColor;
             arrowText.raycastTarget = false;
 
             RectTransform arrowRect = arrow.GetComponent<RectTransform>();
@@ -1894,11 +2235,30 @@ public class VabOptionsUi : MonoBehaviour
 
         templateLayout.ignoreLayout = true;
 
+        RectTransform templateRect = template.GetComponent<RectTransform>();
+        if (templateRect != null)
+        {
+            templateRect.anchorMin = new Vector2(0f, 0f);
+            templateRect.anchorMax = new Vector2(1f, 0f);
+            templateRect.pivot = new Vector2(0.5f, 1f);
+            templateRect.anchoredPosition = new Vector2(0f, 2f);
+            templateRect.sizeDelta = new Vector2(0f, 148f);
+        }
+
         Image templateBackground = template.GetComponent<Image>();
         if (templateBackground != null)
         {
-            templateBackground.color = new Color(0.14f, 0.17f, 0.22f, 0.98f);
+            templateBackground.color = DropdownPanelColor;
         }
+
+        Outline templateOutline = template.GetComponent<Outline>();
+        if (templateOutline == null)
+        {
+            templateOutline = template.gameObject.AddComponent<Outline>();
+        }
+
+        templateOutline.effectColor = ControlBorder;
+        templateOutline.effectDistance = new Vector2(1f, -1f);
 
         Transform viewport = template.Find("Viewport");
         if (viewport != null)
@@ -1906,44 +2266,123 @@ public class VabOptionsUi : MonoBehaviour
             Image viewportMask = viewport.GetComponent<Image>();
             if (viewportMask != null)
             {
-                viewportMask.color = new Color(1f, 1f, 1f, 0.04f);
+                viewportMask.color = Color.white;
+            }
+
+            RectTransform viewportRect = viewport.GetComponent<RectTransform>();
+            if (viewportRect != null)
+            {
+                viewportRect.offsetMin = new Vector2(4f, 4f);
+                viewportRect.offsetMax = new Vector2(-8f, -4f);
+            }
+        }
+
+        Transform scrollbar = template.Find("Scrollbar");
+        if (scrollbar != null)
+        {
+            Image scrollbarImage = scrollbar.GetComponent<Image>();
+            if (scrollbarImage != null)
+            {
+                scrollbarImage.color = ControlBackground;
+            }
+
+            Transform slidingArea = scrollbar.Find("Sliding Area/Handle");
+            if (slidingArea != null)
+            {
+                Image handleImage = slidingArea.GetComponent<Image>();
+                if (handleImage != null)
+                {
+                    handleImage.color = ControlBorder;
+                }
             }
         }
 
         Transform item = template.Find("Viewport/Content/Item");
-        if (item != null)
+        if (item == null)
         {
-            Transform itemBackground = item.Find("Item Background");
-            if (itemBackground != null)
+            return;
+        }
+
+        RectTransform itemRect = item.GetComponent<RectTransform>();
+        if (itemRect != null)
+        {
+            itemRect.sizeDelta = new Vector2(0f, 36f);
+        }
+
+        Transform itemBackground = item.Find("Item Background");
+        if (itemBackground != null)
+        {
+            Image itemBackgroundImage = itemBackground.GetComponent<Image>();
+            if (itemBackgroundImage != null)
             {
-                Image itemBackgroundImage = itemBackground.GetComponent<Image>();
-                if (itemBackgroundImage != null)
-                {
-                    itemBackgroundImage.color = new Color(0.18f, 0.22f, 0.28f, 1f);
-                }
+                itemBackgroundImage.color = Color.white;
+            }
+        }
+
+        Transform itemCheckmark = item.Find("Item Checkmark");
+        Text checkLabel = null;
+        if (itemCheckmark != null)
+        {
+            RectTransform checkRect = itemCheckmark.GetComponent<RectTransform>();
+            if (checkRect != null)
+            {
+                checkRect.anchorMin = new Vector2(0f, 0.5f);
+                checkRect.anchorMax = new Vector2(0f, 0.5f);
+                checkRect.pivot = new Vector2(0.5f, 0.5f);
+                checkRect.sizeDelta = new Vector2(18f, 18f);
+                checkRect.anchoredPosition = new Vector2(16f, 0f);
             }
 
-            Transform itemLabel = item.Find("Item Label");
-            if (itemLabel != null)
+            Image checkImage = itemCheckmark.GetComponent<Image>();
+            if (checkImage != null)
             {
-                Text itemLabelText = itemLabel.GetComponent<Text>();
-                if (itemLabelText != null)
-                {
-                    itemLabelText.font = uiFont;
-                    itemLabelText.fontSize = 16;
-                    itemLabelText.color = LabelColor;
-                }
+                checkImage.enabled = false;
             }
 
-            Toggle itemToggle = item.GetComponent<Toggle>();
-            if (itemToggle != null)
+            checkLabel = GetOrCreateDropdownArrowLabel(itemCheckmark);
+            checkLabel.font = uiFont;
+            checkLabel.text = "✓";
+            checkLabel.fontSize = 14;
+            checkLabel.fontStyle = FontStyle.Bold;
+            checkLabel.alignment = TextAnchor.MiddleCenter;
+            checkLabel.color = CheckmarkColor;
+            checkLabel.raycastTarget = false;
+        }
+
+        Transform itemLabel = item.Find("Item Label");
+        if (itemLabel != null)
+        {
+            RectTransform itemLabelRect = itemLabel.GetComponent<RectTransform>();
+            if (itemLabelRect != null)
             {
-                ColorBlock colors = itemToggle.colors;
-                colors.normalColor = new Color(0.18f, 0.22f, 0.28f, 1f);
-                colors.highlightedColor = new Color(0.24f, 0.32f, 0.42f, 1f);
-                colors.pressedColor = new Color(0.20f, 0.42f, 0.62f, 1f);
-                colors.selectedColor = new Color(0.20f, 0.42f, 0.62f, 1f);
-                itemToggle.colors = colors;
+                itemLabelRect.offsetMin = new Vector2(34f, 2f);
+                itemLabelRect.offsetMax = new Vector2(-10f, -2f);
+            }
+
+            Text itemLabelText = itemLabel.GetComponent<Text>();
+            if (itemLabelText != null)
+            {
+                itemLabelText.font = uiFont;
+                itemLabelText.fontSize = 16;
+                itemLabelText.color = LabelColor;
+                itemLabelText.alignment = TextAnchor.MiddleLeft;
+            }
+        }
+
+        Toggle itemToggle = item.GetComponent<Toggle>();
+        if (itemToggle != null)
+        {
+            ColorBlock colors = itemToggle.colors;
+            colors.normalColor = DropdownItemColor;
+            colors.highlightedColor = DropdownItemHighlight;
+            colors.pressedColor = DropdownItemSelected;
+            colors.selectedColor = DropdownItemSelected;
+            colors.fadeDuration = 0.08f;
+            itemToggle.colors = colors;
+
+            if (checkLabel != null)
+            {
+                itemToggle.graphic = checkLabel;
             }
         }
     }
@@ -2092,6 +2531,26 @@ public class VabOptionsUi : MonoBehaviour
         };
     }
 
+    static int DropdownIndexToDisplayMode(int dropdownIndex)
+    {
+        return dropdownIndex switch
+        {
+            DisplayModeDropdownExclusive => VabGraphicsManager.DisplayModeExclusive,
+            DisplayModeDropdownBorderless => VabGraphicsManager.DisplayModeBorderless,
+            _ => VabGraphicsManager.DisplayModeWindowed,
+        };
+    }
+
+    static int DisplayModeToDropdownIndex(int displayMode)
+    {
+        return VabGraphicsManager.ClampDisplayMode(displayMode) switch
+        {
+            VabGraphicsManager.DisplayModeExclusive => DisplayModeDropdownExclusive,
+            VabGraphicsManager.DisplayModeBorderless => DisplayModeDropdownBorderless,
+            _ => DisplayModeDropdownWindowed,
+        };
+    }
+
     static int DropdownIndexToPostMode(int dropdownIndex)
     {
         return dropdownIndex == PostModeDropdownSmaa
@@ -2175,21 +2634,25 @@ public class VabOptionsUi : MonoBehaviour
         blockLayout.childForceExpandHeight = false;
 
         LayoutElement blockElement = block.AddComponent<LayoutElement>();
-        blockElement.minHeight = 88f;
+        blockElement.minHeight = 92f;
+        blockElement.preferredHeight = 92f;
+        blockElement.flexibleHeight = 0f;
 
         GameObject titleRow = CreateUiObject("Title", block.transform);
         LayoutElement titleLayout = titleRow.AddComponent<LayoutElement>();
         titleLayout.minHeight = 22f;
+        titleLayout.preferredHeight = 22f;
         Text titleLabel = titleRow.AddComponent<Text>();
         titleLabel.font = uiFont;
-        titleLabel.fontSize = 15;
+        titleLabel.fontSize = 14;
         titleLabel.alignment = TextAnchor.MiddleLeft;
-        titleLabel.color = LabelColor;
+        titleLabel.color = MutedLabelColor;
         titleLabel.text = title;
 
         GameObject valueRow = CreateUiObject("Value", block.transform);
         LayoutElement valueLayout = valueRow.AddComponent<LayoutElement>();
         valueLayout.minHeight = 20f;
+        valueLayout.preferredHeight = 20f;
         valueLabel = valueRow.AddComponent<Text>();
         valueLabel.font = uiFont;
         valueLabel.fontSize = 13;
@@ -2210,6 +2673,7 @@ public class VabOptionsUi : MonoBehaviour
 
         LayoutElement sliderLayout = sliderObject.AddComponent<LayoutElement>();
         sliderLayout.minHeight = 28f;
+        sliderLayout.preferredHeight = 28f;
 
         Slider slider = sliderObject.AddComponent<Slider>();
         slider.minValue = min;

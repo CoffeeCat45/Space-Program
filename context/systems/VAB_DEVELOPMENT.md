@@ -15,7 +15,7 @@
 ```
 SpaceProgramUnity/SpaceProgram/Ships/              ← JSON-чертежи ракет (.json), вне Assets
 SpaceProgramUnity/SpaceProgram/Assets/
-├── Scenes/                              ← VabScene, PlaybackScene, MenuScene
+├── Scenes/                              ← VabScene (хост), PlaybackScene, MenuScene; ангар — `Scenery/KSC/Interiors3D/VABlvl3`
 ├── Models/
 │   ├── Environments/                    ← 3D-меши ангаров / зданий (импорт FBX/OBJ)
 │   └── Parts/

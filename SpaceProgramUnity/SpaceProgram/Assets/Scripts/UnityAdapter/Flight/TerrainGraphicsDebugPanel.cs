@@ -185,6 +185,7 @@ public sealed class TerrainGraphicsDebugPanel : MonoBehaviour
             runner.IsInitialized &&
             !runner.IsMainMenuVisible &&
             !runner.IsVabEditorActive &&
+            !FlightLodLoadingOverlay.IsBlocking &&
             userRequestedVisible &&
             tuning != null &&
             tuning.IsAvailable;
