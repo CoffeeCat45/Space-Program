@@ -9,22 +9,12 @@ static class ShipOrientationControl
     {
         if (input.mode == ShipOrientationMode.Prograde)
         {
-            if (simulation.IsShipInAtmosphere())
-            {
-                return simulation.GetShipProgradeDirectionForAtmosphere();
-            }
-
-            return simulation.GetShipProgradeDirectionRelativeToActivePrimary();
+            return simulation.GetShipProgradeDirectionForSpeedReference();
         }
 
         if (input.mode == ShipOrientationMode.Retrograde)
         {
-            if (simulation.IsShipInAtmosphere())
-            {
-                return simulation.GetShipRetrogradeDirectionForAtmosphere();
-            }
-
-            return simulation.GetShipRetrogradeDirectionRelativeToActivePrimary();
+            return simulation.GetShipRetrogradeDirectionForSpeedReference();
         }
 
         if (

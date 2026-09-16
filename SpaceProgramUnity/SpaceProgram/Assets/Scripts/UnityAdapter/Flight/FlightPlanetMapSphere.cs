@@ -48,6 +48,7 @@ public sealed class FlightPlanetMapSphere : MonoBehaviour
         runtimeMesh.name = "PlanetMapSphere";
         meshFilter.sharedMesh = runtimeMesh;
         meshRenderer.sharedMaterial = surfaceMaterial;
+        meshRenderer.enabled = true;
         meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         meshRenderer.receiveShadows = false;
         meshRenderer.allowOcclusionWhenDynamic = false;
@@ -55,6 +56,10 @@ public sealed class FlightPlanetMapSphere : MonoBehaviour
         if (applyScaledSpaceLayer)
         {
             FlightRenderLayers.ApplyScaledSpaceLayer(gameObject);
+        }
+        else
+        {
+            FlightRenderLayers.ApplyLocalPhysicsLayer(gameObject);
         }
     }
 

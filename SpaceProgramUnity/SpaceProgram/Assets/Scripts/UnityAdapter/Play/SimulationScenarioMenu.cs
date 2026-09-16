@@ -22,7 +22,9 @@ public class SimulationScenarioMenu : MonoBehaviour
             !runner.IsInitialized ||
             runner.IsMainMenuVisible ||
             runner.IsVabEditorActive ||
-            FlightLodLoadingOverlay.IsBlocking
+            FlightLodLoadingOverlay.IsBlocking ||
+            FlightHudSettingsUi.IsOpen ||
+            FlightDebugSettingsUi.IsOpen
         )
         {
             return;
@@ -30,21 +32,15 @@ public class SimulationScenarioMenu : MonoBehaviour
 
         EnsureStyles();
 
-        float buttonWidth = 260.0f;
-        float buttonHeight = 30.0f;
-        float rightMargin = 10.0f;
-        float topMargin = 10.0f;
-        float configurationButtonHeight = 28.0f;
-        float buttonGap = 8.0f;
-        float buttonX = Screen.width - buttonWidth - rightMargin;
-        float scenariosButtonY =
-            topMargin + configurationButtonHeight + buttonGap;
+        if (!FlightDebugSettings.IsVisible(FlightDebugOverlay.Scenarios))
+        {
+            showMenu = false;
+        }
 
-        if (GUI.Button(
-            new Rect(buttonX, scenariosButtonY, buttonWidth, buttonHeight),
-            T("Scenarios"),
-            buttonStyle
-        ))
+        if (FlightDebugChromeLayout.TryGetTopRightButtonRect(
+            FlightDebugOverlay.Scenarios,
+            out Rect buttonRect
+        ) && GUI.Button(buttonRect, T("Scenarios"), buttonStyle))
         {
             showMenu = !showMenu;
         }

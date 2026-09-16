@@ -12,11 +12,11 @@
 |----------|--------|-------------|
 | Position scale | `WorldVisualBridge.FlightPositionScale` (1:1 sim м) | `MapPositionScale` = **0.001** |
 | Render origin | COM корабля (interpolated) | **Orbit focus body** (см. ниже) |
-| Камера | follow корабль, LOD terrain | ortho «глобус», celestial markers |
+| Камера | follow корабль; identity / зенит +Y (как Scene; skybox инерциальный) | по умолчанию follow корабль; dbl-click — осмотр body |
 | След корабля | опционально (dev) | скрыт |
 | Orbit overlay | current/planned ship orbit | + фоновые орбиты планет/Луны |
 
-Переключение: **M** в `SimulationRunner` → `SyncVisualSubsystemScales()`, `OrbitOverlayCamera`, layer masks, `RestoreShipAsFlightFocus` при выходе из map (камера не остаётся на Planet). **Повторный вход в M** восстанавливает последний dbl-click focus (`lastMapCameraFocusBodyName`), а не снова полушарие площадки. Flight LOD-дерево **не** схлопывать на вход в M (только скрыть чанки); иначе hitch на секунды.
+Переключение: **M** в `SimulationRunner` → `SyncVisualSubsystemScales()`, `OrbitOverlayCamera`, layer masks, `RestoreShipAsFlightFocus` при выходе из map (камера не остаётся на Planet). Позы полёта и карты **не общие**: yaw/pitch/zoom первого лица не сбрасываются на дефолт сценария и chase `(52,14,-6)` при каждом M; карта помнит свой ракурс. **Первый M** (и повтор без dbl-click) — камера и origin на **корабль**, identity (не радиал SoI): камера не едет за планетой, пока корабль летит. **Повторный вход в M** после dbl-click восстанавливает этот body (`lastMapCameraFocusBodyName`). **F** снова на корабль. Flight LOD-дерево **не** схлопывать на вход в M (только скрыть чанки); иначе hitch на секунды.
 
 Preview CA и вход в SoI — **разные кадры** (HUD не дожимает SoI в том же кадре). Иначе spike 6–10 с и 0 FPS, M не отвисает.
 
@@ -26,8 +26,9 @@ Preview CA и вход в SoI — **разные кадры** (HUD не дожи
 
 **Двойной ЛКМ** на теле в map (`CameraController` → `SimulationRunner.StabilizeMapCameraOnFocusBody`):
 
+- без dbl-click (первый **M**, **F**) origin и камера = **Ship**; identity (не радиал SoI), камера не едет за планетой;
 - pick: сначала экранный диск тела (меньший диск побеждает, если Солнце на фоне Земли), иначе physics raycast;
-- `orbitFocusBodyName` + pivot камеры = **то же тело** (раньше pivot всегда был Planet);
+- `orbitFocusBodyName` + pivot камеры = **то же тело** (осмотр глобуса); корабль — снова `BindMapCameraToShip`;
 - `CameraController.StabilizeMapOrbitOnTarget` — орбита снаружи вокруг pivot;
 - допустимые имена: `Ship`, vessel, `Planet`, `Moon`, `Sun`;
 - `GetRenderOrigin()` в map = sim-позиция focus body;
@@ -45,7 +46,7 @@ Preview CA и вход в SoI — **разные кадры** (HUD не дожи
 - Путь корабля обновляется **каждый кадр**; баллистическая дуга при небольшом pitch-over, не радиальная иголка до порога.
 - Hover по линии (warp-to-here): **тот же коник, что на экране**, не 1000 шагов `CreateCopy`. `Camera.main` один раз за кадр. Круговая вокруг Солнца не должна проседать в 40 FPS из‑за hover.
 - Орбита корабля всегда относительно **active SoI primary** (`BuildOrbitPath` / `TryGetOrbitApsides`): любой текущий и будущий шар SoI, без веток Earth/Moon. Вырожденный коник (почти радиальная скорость, крошечный \(p\), иголка, которая едва выходит над поверхностью) → радиальная двухтельная ломаная, путь не пустой. Замкнутая орбита, которая не бьёт поверхность → полный эллипс; суборбита, которая пересекает шар → дуга impact→Ap→impact.
-- **В полёте** толстая серая линия + пины Pe/Ap **всегда траектория корабля vs active primary**, даже если focus на Луне/Земле. Орбита focused celestial остаётся тонким фоном (не подменяет путь корабля). На паде (`Landed`) оверлей корабля пустой; толстая линия = орбита focused celestial вокруг родителя.
+- **В полёте** толстая серая линия + пины Pe/Ap **всегда траектория корабля vs active primary**, даже если focus на Луне/Земле. Орбита focused celestial остаётся тонким фоном (не подменяет путь корабля). Pe/Ap планеты/спутника — **только если это тело выбрано** (dbl-click), не на всех фоновых эллипсах сразу; кэш корабля не перезаписывают. На паде (`Landed`) оверлей корабля пустой; толстая линия = орбита focused celestial вокруг родителя.
 - Pe/Ap: иконка-домик на линии (`OrbitEventBadge`). Только если высота над сферой **> 0** (суборбита: Pe под поверхностью не рисуется, остаётся Ap). Окно с высотой/T+ — **по наведению на иконку**, не на точку линии. На паде — Pe/Ap орбиты focused celestial, не корабля.
 - CA / «Призрак Moon» на карте **выкл.**: цель по умолчанию = Moon, на лунном паде это «сближение с собой» (высота ≈ −R). Overlay не рисуется, пока target = active primary.
 - Зелёный маркер корабля и Pe/Ap — OrbitOverlay, `ZTest Always`, но **тот же disk-occluder, что у линий** (якорь иконки за диском Planet/Moon → discard). На ближней стороне диска зелёная метка **поднимается** над PNG. Hover Pe/Ap не срабатывает, если значок за планетой.
@@ -96,7 +97,7 @@ UI: **Developer settings** (кнопка справа снизу) → «Сфер
 ## Солнце и свет (flight)
 
 - Core: Sun в heliocentric pad-сценариях, Земля на орбите вокруг Sun;
-- Pad-сценарии (мыс и др.) содержат Луну. С мыса Луна в flight на **истинной** дальности в **системе корабля** (far clip 8 Mm). Глобус под `FlightUniverseRoot`: localPosition = ship-frame − slide корня, иначе диск на ~высоте ближе физики (FP «падаю на Луну», карта ещё далеко). Kepler rails в 1.25×SoI Луны выкл.; хорда через пузырь — смена primary. Очередь глобуса **3050**. SMA пока **4.5 Mm**; 1:10 = 38.44 Mm позже (тогда scaled-space камера).
+- Pad-сценарии (мыс и др.) содержат Луну. С мыса Луна в flight на **истинной** дальности в **системе корабля** (far clip 8 Mm). Глобус под `FlightUniverseRoot`: localPosition = ship-frame − slide корня, иначе диск на ~высоте ближе физики (FP «падаю на Луну», карта ещё далеко). Kepler rails в 1.25×SoI Луны выкл. **на подлёте**; после выхода Moon→Earth (улетаем) рельсы Земли снова можно — иначе варп после смены SoI остаётся на 12 численных шагах. Очередь глобуса **3050**. SMA пока **4.5 Mm**; 1:10 = 38.44 Mm позже (тогда scaled-space камера).
 - `SunVisual`: directional light из sim-направления на корабль; billboard диск в flight (цвет как карта); в map — только свет, диск у `BodyView`;
 - Map: диск Солнца в **физической** sim-позиции (тот же origin, что гелиоцентрическая орбита корабля и Земли). Диск ×0.4 (`MapSunVisualRadiusScale`). Земля–Солнце в Core 44.3 Mm. Луна/LEO без отдельной растяжки.
 - Pick Солнца: local radius **1.5** (диск), не огромный шар — иначе dbl-click Sun попадал в Planet.
@@ -110,6 +111,7 @@ UI: **Developer settings** (кнопка справа снизу) → «Сфер
 | Toggle | Default | Эффект |
 |--------|---------|--------|
 | Infinite fuel | Off | `SimulationCheatFlags` |
+| No crash damage | Off | `SimulationCheatFlags.DisableCrashDamage` |
 | Thrust multiplier | ×1 | `SimulationCheatFlags` |
 | Cloud / Atmosphere visuals | On | runtime на `FlightPlanetSphere` |
 | Earth spin | On | cheat freeze spin |
@@ -144,7 +146,7 @@ TIFF: `Earth5400x2700_geo.tif` → 2K PNG; `Earth21600x10800_geo.tif` → 8K PNG
 
 ## Проверка в Play
 
-1. «С мыса» → **M** → dbl-click Earth → орбита Земли, origin на Земле, камера вокруг Земли.
+1. «С мыса» → **M** → камера на корабль (не за диском Земли). dbl-click Earth → орбита Земли, origin на Земле, камера вокруг Земли. **F** → снова корабль.
 2. dbl-click Sun → камера вокруг Солнца, орбита Земли вокруг Sun, без сферы SoI у Sun.
 3. Developer settings → Сфера SoI On → dbl-click Earth → 3 кольца вокруг Земли.
 4. **M** exit → камера на корабль, не на Planet.

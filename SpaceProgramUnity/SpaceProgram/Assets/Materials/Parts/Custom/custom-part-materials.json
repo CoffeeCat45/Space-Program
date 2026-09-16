@@ -1,0 +1,82 @@
+{
+    "atlases": [
+        {
+            "contentHash": "94fd8f82636b6e9426c039b8d5590ec0de51e551",
+            "atlasStem": "parts-atlas-01",
+            "materialPath": "Assets/Materials/Parts/Custom/3.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/parts-atlas-01-94fd8f82",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/parts-atlas-01-94fd8f82/parts-atlas-01-94fd8f82_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/parts-atlas-01-94fd8f82/parts-atlas-01-94fd8f82_metallic.png",
+            "reflectionAssetPath": "",
+            "maskAssetPath": "",
+            "reflectionKind": 0,
+            "partIds": [
+                "3"
+            ]
+        },
+        {
+            "contentHash": "fb2c7d317eeb7ac4e119197f974432316abc42ca",
+            "atlasStem": "cabine-1",
+            "materialPath": "Assets/Materials/Parts/Custom/cabine-1.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/cabine-1-fb2c7d31",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-fb2c7d31/cabine-1-fb2c7d31_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-fb2c7d31/cabine-1-fb2c7d31_metallic.png",
+            "reflectionAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-fb2c7d31/cabine-1-fb2c7d31_roughness.png",
+            "maskAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-fb2c7d31/cabine-1-fb2c7d31_Mask.png",
+            "reflectionKind": 0,
+            "partIds": [
+                "cabine-1"
+            ]
+        },
+        {
+            "contentHash": "4261bbf1bebdc0e4d07dd85dc78795f860ee2a05",
+            "atlasStem": "cabine-1",
+            "materialPath": "Assets/Materials/Parts/Custom/cabine-1.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/cabine-1-4261bbf1",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-4261bbf1/cabine-1-4261bbf1_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-4261bbf1/cabine-1-4261bbf1_metallic.png",
+            "reflectionAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-4261bbf1/cabine-1-4261bbf1_roughness.png",
+            "maskAssetPath": "Assets/Models/Parts/Custom/_shared/cabine-1-4261bbf1/cabine-1-4261bbf1_Mask.png",
+            "reflectionKind": 1,
+            "partIds": []
+        },
+        {
+            "contentHash": "08980aad329fb69ff9a52743a79d5da856536327",
+            "atlasStem": "fuel-tank",
+            "materialPath": "Assets/Materials/Parts/Custom/rocket-fuel-tank.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/fuel-tank-08980aad",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-08980aad/fuel-tank-08980aad_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-08980aad/fuel-tank-08980aad_metallic.png",
+            "reflectionAssetPath": "",
+            "maskAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-08980aad/fuel-tank-08980aad_Mask.png",
+            "reflectionKind": 0,
+            "partIds": []
+        },
+        {
+            "contentHash": "4615e936a2403c9f87e01ebfe20897cb2e9de22d",
+            "atlasStem": "fuel-tank",
+            "materialPath": "Assets/Materials/Parts/Custom/rocket-fuel-tank.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/fuel-tank-4615e936",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-4615e936/fuel-tank-4615e936_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-4615e936/fuel-tank-4615e936_metallic.png",
+            "reflectionAssetPath": "",
+            "maskAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-4615e936/fuel-tank-4615e936_Mask.png",
+            "reflectionKind": 1,
+            "partIds": []
+        },
+        {
+            "contentHash": "b231ef88afa7e794147d5784769e473e0f4768e3",
+            "atlasStem": "fuel-tank",
+            "materialPath": "Assets/Materials/Parts/Custom/rocket-fuel-tank.mat",
+            "sharedFolder": "Assets/Models/Parts/Custom/_shared/fuel-tank-b231ef88",
+            "albedoAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-b231ef88/fuel-tank-b231ef88_albedo.png",
+            "metallicAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-b231ef88/fuel-tank-b231ef88_metallic.png",
+            "reflectionAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-b231ef88/fuel-tank-b231ef88_roughness.png",
+            "maskAssetPath": "Assets/Models/Parts/Custom/_shared/fuel-tank-b231ef88/fuel-tank-b231ef88_Mask.png",
+            "reflectionKind": 0,
+            "partIds": [
+                "rocket-fuel-tank"
+            ]
+        }
+    ]
+}

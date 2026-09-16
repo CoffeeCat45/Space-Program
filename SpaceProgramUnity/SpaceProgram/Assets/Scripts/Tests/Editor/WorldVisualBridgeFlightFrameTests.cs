@@ -149,4 +149,196 @@ public sealed class WorldVisualBridgeFlightFrameTests
             "Distant-body frame must not ignore LOD spin (that desyncs map vs flight faces)."
         );
     }
+
+    [Test]
+    public void GetInertialMeshToFlightRotation_MovesWhenSpinAdvancesUnderFrozenFlight()
+    {
+        global::SimVector3 cape = CapeSim();
+        Quaternion frozenFlight = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(cape);
+        Quaternion atLaunch = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            frozenFlight,
+            global::SimQuaternion.Identity()
+        );
+        Quaternion later = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            frozenFlight,
+            global::SimQuaternion.FromAxisAngle(global::SimVector3.UnitY(), Math.PI / 6.0)
+        );
+
+        Assert.Greater(
+            Quaternion.Angle(atLaunch, later),
+            20f,
+            "Pad-locked planet mesh with live Core spin must rotate the inertial skybox."
+        );
+    }
+
+    [Test]
+    public void FlightVisualInertialFrame_MatchesPlanetLocalRotationAndInterpolatedSpin()
+    {
+        global::SimVector3 cape = CapeSim();
+        Quaternion planetLocal = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(cape);
+        global::SimQuaternion spin = global::SimQuaternion.FromAxisAngle(
+            global::SimVector3.UnitY(),
+            Math.PI / 5.0
+        );
+        WorldVisualBridge.BeginFlightVisualInertialFrame(planetLocal, spin);
+
+        Assert.IsTrue(
+            WorldVisualBridge.TryGetFlightVisualInertialToFlight(out Quaternion fromFrame)
+        );
+        Quaternion expected = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            planetLocal,
+            spin
+        );
+        Assert.Less(Quaternion.Angle(fromFrame, expected), 0.01f);
+
+        WorldVisualBridge.EndFlightVisualInertialFrame();
+        Assert.IsFalse(
+            WorldVisualBridge.TryGetFlightVisualInertialToFlight(out _)
+        );
+    }
+
+    [Test]
+    public void FlightCameraUsesInertialOrbitFrame_NeverForShipFollow()
+    {
+        Assert.IsFalse(
+            WorldVisualBridge.FlightCameraUsesInertialOrbitFrame(false, true),
+            "Pad ship-follow stays identity (horizon-locked)."
+        );
+        Assert.IsFalse(
+            WorldVisualBridge.FlightCameraUsesInertialOrbitFrame(false, false),
+            "Flying ship-follow stays identity like the vessel / Scene."
+        );
+        Assert.IsFalse(
+            WorldVisualBridge.FlightCameraUsesInertialOrbitFrame(true, false),
+            "Map ship-follow stays identity; F restores ship."
+        );
+    }
+
+    [Test]
+    public void FlightCameraOrbitFrame_PadAndFlyingStayIdentity()
+    {
+        Assert.AreEqual(
+            WorldVisualBridge.FlightCameraUsesInertialOrbitFrame(false, true),
+            WorldVisualBridge.FlightCameraUsesInertialOrbitFrame(false, false),
+            "Liftoff must not switch the chase camera into inertial Mesh-to-flight."
+        );
+    }
+
+    [Test]
+    public void SignedOrbitRollDegrees_MeasuresTwistAroundLook()
+    {
+        Vector3 look = Vector3.forward;
+        Vector3 frameUp = Vector3.up;
+        Vector3 cameraUp = Quaternion.AngleAxis(30.0f, look) * frameUp;
+        Assert.AreEqual(
+            30.0f,
+            WorldVisualBridge.SignedOrbitRollDegrees(look, frameUp, cameraUp),
+            0.05f
+        );
+    }
+
+    [Test]
+    public void MapShipOrbitFrame_LocalUpFollowsMeshRadialAtCape()
+    {
+        // Math helper for Mesh-Frame outward. Live flying camera stays identity,
+        // not this SoI-radial frame and not inertial Mesh-to-flight.
+        global::SimVector3 cape = CapeSim();
+        Quaternion frame = WorldVisualBridge.GetMapShipOrbitFrameRotation(cape);
+        Vector3 localUp = frame * Vector3.up;
+        Vector3 meshRadial = WorldVisualBridge.SimNormalToMeshFrameUnity(cape);
+
+        Assert.Greater(
+            Vector3.Dot(localUp.normalized, meshRadial.normalized),
+            0.99f,
+            "SoI-radial helper +Y is Mesh-Frame outward (not applied as live camera frame)."
+        );
+    }
+
+    [Test]
+    public void GetFlightVisualReorientationDelta_SameRadial_IsIdentity()
+    {
+        global::SimVector3 cape = CapeSim();
+        global::SimVector3 east = EastTangent(cape);
+        global::SimQuaternion orientation = global::SimQuaternion.FromForwardAndUp(east, cape);
+        Quaternion delta = WorldVisualBridge.GetFlightVisualReorientationDelta(
+            orientation,
+            cape,
+            cape
+        );
+
+        Assert.Less(
+            Quaternion.Angle(Quaternion.identity, delta),
+            0.05f,
+            "No SoI change must not rotate the chase offset."
+        );
+    }
+
+    [Test]
+    public void GetFlightVisualReorientationDelta_EarthToMoonRadial_PreservesShipLocalCameraOffset()
+    {
+        global::SimVector3 earthRadial = CapeSim();
+        global::SimVector3 moonRadial = new global::SimVector3(0.0, 0.0, 1.0);
+        global::SimVector3 east = EastTangent(earthRadial);
+        global::SimQuaternion orientation = global::SimQuaternion.FromForwardAndUp(
+            east,
+            earthRadial
+        );
+        Quaternion oldVisual = WorldVisualBridge.SimOrientationToFlightVisualRotation(
+            orientation,
+            WorldVisualBridge.SimNormalToUnity(earthRadial)
+        );
+        Quaternion newVisual = WorldVisualBridge.SimOrientationToFlightVisualRotation(
+            orientation,
+            WorldVisualBridge.SimNormalToUnity(moonRadial)
+        );
+        Quaternion delta = WorldVisualBridge.GetFlightVisualReorientationDelta(
+            orientation,
+            earthRadial,
+            moonRadial
+        );
+
+        Assert.Greater(
+            Quaternion.Angle(Quaternion.identity, delta),
+            20f,
+            "Earth↔Moon radial swap must produce a real flight-frame jump."
+        );
+
+        Vector3 oldOffset = Quaternion.Euler(10.0f, 90.0f, 0.0f) * Vector3.back;
+        Vector3 newOffset = delta * oldOffset;
+        Vector3 oldShipLocal = Quaternion.Inverse(oldVisual) * oldOffset;
+        Vector3 newShipLocal = Quaternion.Inverse(newVisual) * newOffset;
+
+        Assert.Greater(
+            Vector3.Dot(oldShipLocal.normalized, newShipLocal.normalized),
+            0.99f,
+            "Applying the SoI delta must keep the chase offset in ship space."
+        );
+
+        Vector3 oldLookShipLocal = Quaternion.Inverse(oldVisual) * (-oldOffset);
+        Vector3 newLookShipLocal = Quaternion.Inverse(newVisual) * (-newOffset);
+        Assert.Greater(
+            Vector3.Dot(oldLookShipLocal.normalized, newLookShipLocal.normalized),
+            0.99f,
+            "SoI change must not invert the ship-relative camera forward."
+        );
+    }
+
+    [Test]
+    public void FlightOrbitOffsetToYawPitch_RoundTripsIdentityChase()
+    {
+        Vector3 offset = Quaternion.Euler(10.0f, 90.0f, 0.0f) * Vector3.back;
+        WorldVisualBridge.FlightOrbitOffsetToYawPitch(
+            offset,
+            out float yaw,
+            out float pitch
+        );
+        Vector3 roundTrip = Quaternion.Euler(pitch, yaw, 0.0f) * Vector3.back;
+
+        Assert.Greater(
+            Vector3.Dot(offset.normalized, roundTrip.normalized),
+            0.99f
+        );
+        Assert.AreEqual(90.0f, yaw, 0.05f);
+        Assert.AreEqual(10.0f, pitch, 0.05f);
+    }
 }

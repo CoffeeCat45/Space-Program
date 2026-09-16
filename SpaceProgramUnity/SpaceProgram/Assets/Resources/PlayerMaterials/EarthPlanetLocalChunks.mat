@@ -85,6 +85,7 @@ Material:
     - _MacroBlendEnd: 100000
     - _MacroBlendMax: 0.16
     - _MacroBlendStart: 22000
+    - _MacroUnifyAltitude: 0
     - _NormalStrength: 1
     - _OceanDepthPackMeters: 2500
     - _OceanSatelliteBlend: 0.78

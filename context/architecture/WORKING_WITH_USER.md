@@ -26,6 +26,8 @@
 
 Карты/высоты/DDS на GitHub нет — Play на чужом клоне без `StreamingAssets/Planet` и RSS не покажет землю. См. `GITHUB_HEAVY_FILES.md`.
 
+**GitHub (commit / push):** origin `https://github.com/CoffeeCat45/Space-Program.git`. Автор коммита всегда `CoffeeCat45 <CoffeeCat45@users.noreply.github.com>` — иначе GitHub режет пуш (GH007, личный Gmail). Не `test1.git`. Канон: `GITHUB_HEAVY_FILES.md`.
+
 ---
 
 ## Рабочая установка для продолжения

@@ -132,6 +132,7 @@ class ShareBuildExporter : IPostprocessBuildWithReport
         try
         {
             FlightHudSettings.FlushIfLoaded();
+            FlightDebugSettings.FlushIfLoaded();
             if (!File.Exists(GameSettingsStore.FilePath))
             {
                 GameSettingsStore.EnsureLoaded();

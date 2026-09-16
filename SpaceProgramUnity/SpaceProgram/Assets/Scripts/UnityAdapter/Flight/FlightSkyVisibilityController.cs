@@ -13,6 +13,11 @@ public class FlightSkyVisibilityController : MonoBehaviour
         runner = sessionRunner;
     }
 
+    void OnDisable()
+    {
+        PartEnvironmentReflections.NotifyLeftFlight();
+    }
+
     void LateUpdate()
     {
         if (runner == null || !runner.IsInitialized)
@@ -26,6 +31,10 @@ public class FlightSkyVisibilityController : MonoBehaviour
         {
             GalaxySkyboxEnvironment.ApplyMapModeVisibility();
             SyncEarthCloudCompositing(mapMode: true);
+            PartEnvironmentReflections.SetEnabled(
+                GameSettingsStore.ReadPartEnvironmentReflections()
+            );
+            PartEnvironmentReflections.TickFlight(0.0, useSpaceCubemap: true);
 
             if (planetTransform != null)
             {
@@ -45,12 +54,25 @@ public class FlightSkyVisibilityController : MonoBehaviour
         if (CelestialTerrainRuntime.IsMoon)
         {
             GalaxySkyboxEnvironment.ApplyMapModeVisibility();
+            ApplyFlightSkyboxOrientation(planetTransform);
             SyncEarthCloudCompositing(mapMode: false);
+            PartEnvironmentReflections.SetEnabled(
+                GameSettingsStore.ReadPartEnvironmentReflections()
+            );
+            PartEnvironmentReflections.TickFlight(
+                simulation.GetShipAltitudeAbovePlanet(),
+                useSpaceCubemap: true
+            );
             return;
         }
 
         double altitudeMeters = simulation.GetShipAltitudeAbovePlanet();
         GalaxySkyboxEnvironment.ApplyAltitudeVisibility(altitudeMeters);
+        ApplyFlightSkyboxOrientation(planetTransform);
+        PartEnvironmentReflections.SetEnabled(
+            GameSettingsStore.ReadPartEnvironmentReflections()
+        );
+        PartEnvironmentReflections.TickFlight(altitudeMeters, useSpaceCubemap: false);
 
         FlightPlanetAtmosphereSphere atmosphere = FindAtmosphere(planetTransform);
 
@@ -67,6 +89,29 @@ public class FlightSkyVisibilityController : MonoBehaviour
         {
             atmosphere.UpdateCameraFacing(camera.transform.position);
         }
+    }
+
+    void ApplyFlightSkyboxOrientation(Transform planetTransform)
+    {
+        if (WorldVisualBridge.TryGetFlightVisualInertialToFlight(
+            out Quaternion inertialToFlight
+        ))
+        {
+            GalaxySkyboxEnvironment.ApplySkyboxRotation(inertialToFlight);
+            return;
+        }
+
+        if (planetTransform == null || runner == null)
+        {
+            GalaxySkyboxEnvironment.ApplySkyboxRotation(Quaternion.identity);
+            return;
+        }
+
+        inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
+            planetTransform.localRotation,
+            runner.GetInterpolatedPlanetSpinRotation()
+        );
+        GalaxySkyboxEnvironment.ApplySkyboxRotation(inertialToFlight);
     }
 
     static FlightPlanetAtmosphereSphere FindAtmosphere(Transform planetTransform)

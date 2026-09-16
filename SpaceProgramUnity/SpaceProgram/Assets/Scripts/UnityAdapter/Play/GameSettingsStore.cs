@@ -172,6 +172,20 @@ public static class GameSettingsStore
         return ParseHudBackground(data.hud.background);
     }
 
+    public static bool ReadPartEnvironmentReflections()
+    {
+        EnsureLoaded();
+        return data.graphics.partEnvironmentReflections;
+    }
+
+    public static void WritePartEnvironmentReflections(bool enabled)
+    {
+        EnsureLoaded();
+        data.graphics.partEnvironmentReflections = enabled;
+        SaveToDisk();
+        PartEnvironmentReflections.SetEnabled(enabled);
+    }
+
     public static void WriteHudBackground(FlightHudBackground background)
     {
         EnsureLoaded();
@@ -228,6 +242,63 @@ public static class GameSettingsStore
         data.hud.hiddenFields = hidden.ToArray();
     }
 
+    public static bool[] ReadDebugOverlayVisibility()
+    {
+        EnsureLoaded();
+        FlightDebugOverlay[] overlays =
+            (FlightDebugOverlay[])Enum.GetValues(typeof(FlightDebugOverlay));
+        bool[] visible = new bool[overlays.Length];
+
+        for (int i = 0; i < visible.Length; i++)
+        {
+            visible[i] = true;
+        }
+
+        string[] hidden = data.debug != null ? data.debug.hiddenOverlays : null;
+
+        if (hidden == null)
+        {
+            return visible;
+        }
+
+        for (int i = 0; i < hidden.Length; i++)
+        {
+            if (
+                Enum.TryParse(hidden[i], out FlightDebugOverlay overlay) &&
+                (int)overlay >= 0 &&
+                (int)overlay < visible.Length
+            )
+            {
+                visible[(int)overlay] = false;
+            }
+        }
+
+        return visible;
+    }
+
+    public static void WriteDebugOverlayVisibility(bool[] visible)
+    {
+        EnsureLoaded();
+        FlightDebugOverlay[] overlays =
+            (FlightDebugOverlay[])Enum.GetValues(typeof(FlightDebugOverlay));
+        List<string> hidden = new List<string>();
+
+        for (int i = 0; i < overlays.Length && i < visible.Length; i++)
+        {
+            if (!visible[i])
+            {
+                hidden.Add(overlays[i].ToString());
+            }
+        }
+
+        if (data.debug == null)
+        {
+            data.debug = new GameSettingsDebug();
+        }
+
+        data.debug.hiddenOverlays = hidden.ToArray();
+    }
+
     static GameSettingsData CreateDefaults()
     {
         GameSettingsData created = new GameSettingsData
@@ -255,12 +326,17 @@ public static class GameSettingsStore
         created.developer.thrustMultiplier = (float)DevSettings.DefaultThrustMultiplier;
         created.developer.shipTrailEnabled = true;
         created.developer.atmosphereOpacity = 1f;
+        created.graphics.partEnvironmentReflections = false;
         created.play.showTargetDirectionLine = true;
         created.play.lastScenario = (int)SimulationScenario.PlanetSurfaceStart;
         created.play.showLodLoadingScreen = false;
+        created.play.flightCameraRig = (int)FlightCameraRigMode.Horizon;
+        created.play.speedReferenceCycleKey = "Backquote";
         created.hud.language = "Russian";
         created.hud.background = FlightHudBackground.Transparent.ToString();
         created.hud.hiddenFields = Array.Empty<string>();
+        created.debug = new GameSettingsDebug();
+        created.debug.hiddenOverlays = Array.Empty<string>();
         return created;
     }
 
@@ -286,9 +362,24 @@ public static class GameSettingsStore
             data.play = new GameSettingsPlay();
         }
 
+        if (string.IsNullOrEmpty(data.play.speedReferenceCycleKey))
+        {
+            data.play.speedReferenceCycleKey = "Backquote";
+        }
+
         if (data.hud.hiddenFields == null)
         {
             data.hud.hiddenFields = Array.Empty<string>();
+        }
+
+        if (data.debug == null)
+        {
+            data.debug = new GameSettingsDebug();
+        }
+
+        if (data.debug.hiddenOverlays == null)
+        {
+            data.debug.hiddenOverlays = Array.Empty<string>();
         }
     }
 
@@ -411,6 +502,8 @@ public static class GameSettingsStore
         );
         developer.planetSpinDisabled =
             PlayerPrefs.GetInt("SpaceProgram.Dev.PlanetSpinDisabled", 0) == 1;
+        developer.disableCrashDamage =
+            PlayerPrefs.GetInt("SpaceProgram.Dev.DisableCrashDamage", 0) == 1;
         developer.shipTrailEnabled =
             PlayerPrefs.GetInt("SpaceProgram.Dev.ShipTrailEnabled", 1) == 1;
         developer.soiSphereEnabled =

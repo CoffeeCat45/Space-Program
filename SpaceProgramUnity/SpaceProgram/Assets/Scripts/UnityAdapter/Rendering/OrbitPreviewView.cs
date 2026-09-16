@@ -66,6 +66,12 @@ public class OrbitPreviewView : MonoBehaviour
         new System.Collections.Generic.Dictionary<string, LineRenderer>();
     readonly System.Collections.Generic.Dictionary<string, UnityEngine.Vector3[]> backgroundOrbitWorldBuffers =
         new System.Collections.Generic.Dictionary<string, UnityEngine.Vector3[]>();
+    readonly System.Collections.Generic.Dictionary<string, TextMesh> backgroundPeriapsisMarkers =
+        new System.Collections.Generic.Dictionary<string, TextMesh>();
+    readonly System.Collections.Generic.Dictionary<string, TextMesh> backgroundApoapsisMarkers =
+        new System.Collections.Generic.Dictionary<string, TextMesh>();
+    readonly System.Collections.Generic.Dictionary<TextMesh, double> backgroundPeApHoverAltitude =
+        new System.Collections.Generic.Dictionary<TextMesh, double>();
     TextMesh periapsisMarker;
     TextMesh apoapsisMarker;
     TextMesh plannedPeriapsisMarker;
@@ -432,6 +438,147 @@ public class OrbitPreviewView : MonoBehaviour
         return backgroundLine;
     }
 
+    TextMesh GetBackgroundCelestialApsideMarker(
+        string bodyName,
+        bool isPeriapsis,
+        System.Collections.Generic.Dictionary<string, TextMesh> markers
+    )
+    {
+        if (markers.TryGetValue(bodyName, out TextMesh marker) && marker != null)
+        {
+            return marker;
+        }
+
+        string label = isPeriapsis ? "Pe" : "Ap";
+        marker = CreateOrbitMarker(
+            "Background " + label + " " + bodyName,
+            label,
+            EventColorPe,
+            OrbitPinBadgeScreenHeightFraction,
+            pinBadge: true
+        );
+        markers[bodyName] = marker;
+        return marker;
+    }
+
+    void HideBackgroundCelestialApsides(string bodyName)
+    {
+        if (backgroundPeriapsisMarkers.TryGetValue(bodyName, out TextMesh periapsis))
+        {
+            SetMarkerVisible(periapsis, false);
+            backgroundPeApHoverAltitude.Remove(periapsis);
+        }
+
+        if (backgroundApoapsisMarkers.TryGetValue(bodyName, out TextMesh apoapsis))
+        {
+            SetMarkerVisible(apoapsis, false);
+            backgroundPeApHoverAltitude.Remove(apoapsis);
+        }
+    }
+
+    void UpdateBackgroundCelestialApsides(string bodyName)
+    {
+        if (simulation == null)
+        {
+            HideBackgroundCelestialApsides(bodyName);
+            return;
+        }
+
+        Body parentBody = simulation.TryGetOrbitParentBody(bodyName);
+        Body orbitingBody = simulation.GetBodyByName(bodyName);
+        TextMesh periapsis = GetBackgroundCelestialApsideMarker(
+            bodyName,
+            true,
+            backgroundPeriapsisMarkers
+        );
+        TextMesh apoapsis = GetBackgroundCelestialApsideMarker(
+            bodyName,
+            false,
+            backgroundApoapsisMarkers
+        );
+
+        if (parentBody == null || orbitingBody == null)
+        {
+            HideBackgroundCelestialApsides(bodyName);
+            return;
+        }
+
+        bool found = OrbitalMechanics.TryGetOrbitApsides(
+            parentBody,
+            orbitingBody.position,
+            orbitingBody.velocity,
+            out global::SimVector3 periapsisPosition,
+            out double periapsisAltitude,
+            out bool hasPeriapsis,
+            out global::SimVector3 apoapsisPosition,
+            out double apoapsisAltitude,
+            out bool hasApoapsis
+        );
+
+        if (!found)
+        {
+            HideBackgroundCelestialApsides(bodyName);
+            return;
+        }
+
+        bool stretchHeliocentric = MapOrbitIsHeliocentric(bodyName);
+        UpdateBackgroundCelestialApsideMarker(
+            periapsis,
+            periapsisPosition,
+            periapsisAltitude,
+            hasPeriapsis,
+            "Pe",
+            parentBody,
+            stretchHeliocentric
+        );
+        UpdateBackgroundCelestialApsideMarker(
+            apoapsis,
+            apoapsisPosition,
+            apoapsisAltitude,
+            hasApoapsis,
+            "Ap",
+            parentBody,
+            stretchHeliocentric
+        );
+    }
+
+    void UpdateBackgroundCelestialApsideMarker(
+        TextMesh marker,
+        global::SimVector3 keplerPosition,
+        double trueAltitude,
+        bool hasApside,
+        string markerLabel,
+        Body primaryBody,
+        bool stretchHeliocentric
+    )
+    {
+        if (marker == null)
+        {
+            return;
+        }
+
+        if (!hasApside || !IsValidOrbitMarkerAltitude(trueAltitude))
+        {
+            SetMarkerVisible(marker, false);
+            backgroundPeApHoverAltitude.Remove(marker);
+            return;
+        }
+
+        global::SimVector3 markerSimulationPosition = LiftApsideToBodySurface(
+            keplerPosition,
+            primaryBody
+        );
+        ShowMarker(
+            marker,
+            markerSimulationPosition,
+            markerLabel,
+            trueAltitude,
+            double.NaN,
+            stretchHeliocentric
+        );
+        backgroundPeApHoverAltitude[marker] = trueAltitude;
+    }
+
     void UpdateBackgroundMapOrbits(string focusedBodyName)
     {
         if (simulation == null)
@@ -497,7 +644,19 @@ public class OrbitPreviewView : MonoBehaviour
             return true;
         }
 
-        if (simulation.IsVesselBodyName(bodyName) || bodyName == focusedBodyName)
+        if (simulation.IsVesselBodyName(bodyName))
+        {
+            return true;
+        }
+
+        bool flying = simulation.GetFlightStatus() != FlightStatus.Landed;
+        if (flying)
+        {
+            Body primaryBody = simulation.GetActivePrimaryBody();
+            return primaryBody != null && bodyName == primaryBody.name;
+        }
+
+        if (bodyName == focusedBodyName)
         {
             return true;
         }
@@ -515,6 +674,32 @@ public class OrbitPreviewView : MonoBehaviour
         return bodyName == viewBodyName;
     }
 
+    void HideAllBackgroundCelestialApsides()
+    {
+        foreach (System.Collections.Generic.KeyValuePair<string, TextMesh> entry in
+            backgroundPeriapsisMarkers)
+        {
+            HideBackgroundCelestialApsides(entry.Key);
+        }
+    }
+
+    void UpdateSelectedCelestialApsides(string focusedBodyName, bool flying)
+    {
+        HideAllBackgroundCelestialApsides();
+
+        if (
+            !flying ||
+            simulation == null ||
+            string.IsNullOrEmpty(focusedBodyName) ||
+            simulation.IsVesselBodyName(focusedBodyName)
+        )
+        {
+            return;
+        }
+
+        UpdateBackgroundCelestialApsides(focusedBodyName);
+    }
+
     void ClearBackgroundMapOrbits()
     {
         foreach (System.Collections.Generic.KeyValuePair<string, LineRenderer> entry in
@@ -522,6 +707,8 @@ public class OrbitPreviewView : MonoBehaviour
         {
             ClearLineRenderer(entry.Value);
         }
+
+        HideAllBackgroundCelestialApsides();
     }
 
     void ClearFocusedOrbitLineAndMarkers()
@@ -651,6 +838,7 @@ public class OrbitPreviewView : MonoBehaviour
         bool flying = simulation.GetFlightStatus() != FlightStatus.Landed;
 
         UpdateBackgroundMapOrbits(orbitFocusBodyName);
+        UpdateSelectedCelestialApsides(orbitFocusBodyName, flying);
 
         if (flying)
         {
@@ -1283,6 +1471,7 @@ public class OrbitPreviewView : MonoBehaviour
         }
 
         ResolvePeApHoverData(
+            marker,
             isPeriapsis,
             isPlanned,
             out double altitude,
@@ -1394,6 +1583,39 @@ public class OrbitPreviewView : MonoBehaviour
             ref isPlanned,
             ref markerWorldPosition
         );
+        foreach (System.Collections.Generic.KeyValuePair<string, TextMesh> entry in
+            backgroundPeriapsisMarkers)
+        {
+            ConsiderPeApMarkerPick(
+                camera,
+                mousePosition,
+                entry.Value,
+                isCandidatePeriapsis: true,
+                isCandidatePlanned: false,
+                ref closestDistance,
+                ref marker,
+                ref isPeriapsis,
+                ref isPlanned,
+                ref markerWorldPosition
+            );
+        }
+
+        foreach (System.Collections.Generic.KeyValuePair<string, TextMesh> entry in
+            backgroundApoapsisMarkers)
+        {
+            ConsiderPeApMarkerPick(
+                camera,
+                mousePosition,
+                entry.Value,
+                isCandidatePeriapsis: false,
+                isCandidatePlanned: false,
+                ref closestDistance,
+                ref marker,
+                ref isPeriapsis,
+                ref isPlanned,
+                ref markerWorldPosition
+            );
+        }
 
         return marker != null;
     }
@@ -1448,12 +1670,23 @@ public class OrbitPreviewView : MonoBehaviour
     }
 
     void ResolvePeApHoverData(
+        TextMesh marker,
         bool isPeriapsis,
         bool isPlanned,
         out double altitude,
         out double time
     )
     {
+        if (
+            marker != null &&
+            backgroundPeApHoverAltitude.TryGetValue(marker, out double backgroundAltitude)
+        )
+        {
+            altitude = backgroundAltitude;
+            time = double.NaN;
+            return;
+        }
+
         if (isPlanned)
         {
             altitude = isPeriapsis ?
@@ -3387,6 +3620,17 @@ public class OrbitPreviewView : MonoBehaviour
         ApplyPinBadgeScreenSize(apoapsisMarker, camera);
         ApplyPinBadgeScreenSize(plannedPeriapsisMarker, camera);
         ApplyPinBadgeScreenSize(plannedApoapsisMarker, camera);
+        foreach (System.Collections.Generic.KeyValuePair<string, TextMesh> entry in
+            backgroundPeriapsisMarkers)
+        {
+            ApplyPinBadgeScreenSize(entry.Value, camera);
+        }
+
+        foreach (System.Collections.Generic.KeyValuePair<string, TextMesh> entry in
+            backgroundApoapsisMarkers)
+        {
+            ApplyPinBadgeScreenSize(entry.Value, camera);
+        }
     }
 
     void ApplyPinBadgeScreenSize(TextMesh marker, Camera camera)

@@ -185,6 +185,26 @@ public static class WorldVisualBridge
     }
 
     /// <summary>
+    /// Map camera frame with local +Y along inertial radial-out in Mesh Frame.
+    /// Not applied as the live ship-follow camera: that stays identity so Game
+    /// view matches the vessel / Scene (skybox is the inertial picture).
+    /// </summary>
+    public static Quaternion GetMapShipOrbitFrameRotation(global::SimVector3 inertialRadialOut)
+    {
+        if (inertialRadialOut.LengthSquared() <= 1e-12)
+        {
+            return Quaternion.identity;
+        }
+
+        inertialRadialOut = inertialRadialOut.Normalize();
+        global::SimVector3 east = LandingConfig.GetSurfaceEastTangent(inertialRadialOut);
+        return GetFlightFrameRotationFromEastAndUp(
+            SimNormalToMeshFrameUnity(east),
+            SimNormalToMeshFrameUnity(inertialRadialOut)
+        );
+    }
+
+    /// <summary>
     /// Quaternion double-cover: q and −q are the same rotation, but assigning the
     /// flipped sign makes child transforms look like a discrete jump. Keep the
     /// representative closest to the previous frame.
@@ -262,22 +282,64 @@ public static class WorldVisualBridge
     }
 
     /// <summary>
-    /// Flight universe slide altitude. Landed on the pad uses the authored SpawnPoint
-    /// height (constant) — not 0, which sat the vessel on terrain under the deck.
+    /// Ship-follow Game camera never uses inertial Mesh-to-flight.
+    /// Pad, flying, and map stay identity (zenith +Y, same frame as the vessel).
+    /// KSP FREE is skybox + no Q/E lock — not rotating the chase camera.
+    /// </summary>
+    public static bool FlightCameraUsesInertialOrbitFrame(
+        bool mapModeActive,
+        bool padSurfaceLocked
+    )
+    {
+        if (mapModeActive)
+        {
+            return false;
+        }
+
+        if (padSurfaceLocked)
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Flight universe slide altitude above the reference sphere.
+    /// Core pad altitude is already measured from the spawn/deck plane, so it is ~0
+    /// while sitting on Cove. The visual pad mesh still sits <c>spawnHeight</c> above
+    /// flattened GEBCO. Without adding that height back, Flying looks like the rocket
+    /// is inside the deck, then Landed snaps it to SpawnPoint.
     /// </summary>
     internal static double GetFlightVisualAltitudeAboveSphereMeters(Simulation simulation)
     {
-        if (IsFlightPadSurfaceLocked(simulation))
-        {
-            return LaunchPadConstants.GetLaunchSiteSpawnPointHeightAbovePadBaseMeters();
-        }
-
         if (simulation == null)
         {
             return 0.0;
         }
 
-        return simulation.GetShipAltitudeAboveVisualTerrainBody();
+        double altitude = simulation.GetShipAltitudeAboveVisualTerrainBody();
+
+        if (UsesPadDeckVisualAltitude(simulation))
+        {
+            altitude += LaunchPadConstants.GetLaunchSiteSpawnPointHeightAbovePadBaseMeters();
+        }
+
+        return altitude;
+    }
+
+    static bool UsesPadDeckVisualAltitude(Simulation simulation)
+    {
+        if (
+            simulation.ship == null ||
+            !SimulationScenarios.IsAnySurfacePad(simulation.scenario) ||
+            !CelestialTerrainRuntime.ApplyLaunchSiteFlatten
+        )
+        {
+            return false;
+        }
+
+        return simulation.IsShipOnCovePadContact();
     }
 
     /// <summary>
@@ -440,6 +502,45 @@ public static class WorldVisualBridge
     }
 
     /// <summary>
+    /// One InverseSpin clock per flight frame: planet mesh, skybox, distant globes.
+    /// InverseSpin(now)×lerp(r) is forbidden; callers publish the already-blended
+    /// planet localRotation plus interpolated Core spin.
+    /// </summary>
+    static bool hasFlightVisualInertialFrame;
+    static Quaternion flightVisualPlanetLocalRotation = Quaternion.identity;
+    static global::SimQuaternion flightVisualLodSpin = global::SimQuaternion.Identity();
+
+    internal static void BeginFlightVisualInertialFrame(
+        Quaternion planetFlightLocalRotation,
+        global::SimQuaternion interpolatedLodSpin
+    )
+    {
+        flightVisualPlanetLocalRotation = planetFlightLocalRotation;
+        flightVisualLodSpin = interpolatedLodSpin;
+        hasFlightVisualInertialFrame = true;
+    }
+
+    internal static void EndFlightVisualInertialFrame()
+    {
+        hasFlightVisualInertialFrame = false;
+    }
+
+    internal static bool TryGetFlightVisualInertialToFlight(out Quaternion inertialToFlight)
+    {
+        if (!hasFlightVisualInertialFrame)
+        {
+            inertialToFlight = Quaternion.identity;
+            return false;
+        }
+
+        inertialToFlight = GetInertialMeshToFlightRotation(
+            flightVisualPlanetLocalRotation,
+            flightVisualLodSpin
+        );
+        return true;
+    }
+
+    /// <summary>
     /// Takes inertial Mesh Frame directions into the flight universe (LOD planet
     /// already uses InverseSpin so geography stays under the ship). Distant Earth/Moon
     /// must use this, not <see cref="GetSimToFlightFrameRotation"/> on the inertial
@@ -451,7 +552,34 @@ public static class WorldVisualBridge
     )
     {
         Quaternion lodInertial = GetMapPlanetMeshFrameSpinRotation(lodBodySpin);
-        return lodFlightRotation * Quaternion.Inverse(lodInertial);
+        Quaternion meshToFlight = lodFlightRotation * Quaternion.Inverse(lodInertial);
+        if (
+            float.IsNaN(meshToFlight.x) ||
+            float.IsNaN(meshToFlight.y) ||
+            float.IsNaN(meshToFlight.z) ||
+            float.IsNaN(meshToFlight.w)
+        )
+        {
+            return Quaternion.identity;
+        }
+
+        float mag = Mathf.Sqrt(
+            meshToFlight.x * meshToFlight.x +
+            meshToFlight.y * meshToFlight.y +
+            meshToFlight.z * meshToFlight.z +
+            meshToFlight.w * meshToFlight.w
+        );
+        if (mag <= 1e-8f)
+        {
+            return Quaternion.identity;
+        }
+
+        return new Quaternion(
+            meshToFlight.x / mag,
+            meshToFlight.y / mag,
+            meshToFlight.z / mag,
+            meshToFlight.w / mag
+        );
     }
 
     public static Vector3 InertialOffsetToFlight(
@@ -817,6 +945,95 @@ public static class WorldVisualBridge
         );
     }
 
+    /// <summary>
+    /// Discrete SoI jump only. InverseSpin remaps the new primary radial to +Y, so
+    /// the ship visual rotates in world space; the chase camera must take the same
+    /// delta or Game view flips. Not a per-frame inertial chase frame.
+    /// </summary>
+    public static Quaternion GetFlightVisualReorientationDelta(
+        global::SimQuaternion shipOrientation,
+        global::SimVector3 previousRadialSim,
+        global::SimVector3 nextRadialSim
+    )
+    {
+        return GetFlightVisualReorientationDelta(
+            shipOrientation,
+            SimNormalToUnity(previousRadialSim),
+            SimNormalToUnity(nextRadialSim)
+        );
+    }
+
+    public static Quaternion GetFlightVisualReorientationDelta(
+        global::SimQuaternion shipOrientation,
+        Vector3 previousSurfaceNormalUnity,
+        Vector3 nextSurfaceNormalUnity
+    )
+    {
+        Quaternion previousVisual = SimOrientationToFlightVisualRotation(
+            shipOrientation,
+            previousSurfaceNormalUnity
+        );
+        Quaternion nextVisual = SimOrientationToFlightVisualRotation(
+            shipOrientation,
+            nextSurfaceNormalUnity
+        );
+        previousVisual = PickNearestQuaternion(nextVisual, previousVisual);
+        return nextVisual * Quaternion.Inverse(previousVisual);
+    }
+
+    /// <summary>
+    /// Identity-frame chase offset: camera at pivot + Euler(pitch, yaw, 0) * back.
+    /// </summary>
+    public static void FlightOrbitOffsetToYawPitch(
+        Vector3 offsetFromPivot,
+        out float yawDegrees,
+        out float pitchDegrees
+    )
+    {
+        if (offsetFromPivot.sqrMagnitude <= 1e-8f)
+        {
+            yawDegrees = 0.0f;
+            pitchDegrees = 0.0f;
+            return;
+        }
+
+        Vector3 localOffset = offsetFromPivot.normalized;
+        float horizontalDistance = Mathf.Sqrt(
+            (localOffset.x * localOffset.x) +
+            (localOffset.z * localOffset.z)
+        );
+        yawDegrees = Mathf.Atan2(localOffset.x, -localOffset.z) * Mathf.Rad2Deg;
+        pitchDegrees = Mathf.Atan2(localOffset.y, horizontalDistance) * Mathf.Rad2Deg;
+    }
+
+    public static float SignedOrbitRollDegrees(
+        Vector3 lookDirection,
+        Vector3 frameUp,
+        Vector3 cameraUp
+    )
+    {
+        if (lookDirection.sqrMagnitude <= 1e-8f || frameUp.sqrMagnitude <= 1e-8f)
+        {
+            return 0.0f;
+        }
+
+        Quaternion noRoll = Quaternion.LookRotation(
+            lookDirection.normalized,
+            frameUp.normalized
+        );
+        Vector3 noRollUp = noRoll * Vector3.up;
+        if (cameraUp.sqrMagnitude <= 1e-8f)
+        {
+            return 0.0f;
+        }
+
+        return Vector3.SignedAngle(
+            noRollUp,
+            cameraUp.normalized,
+            lookDirection.normalized
+        );
+    }
+
     public static Quaternion SimQuaternionToUnityRotation(global::SimQuaternion orientation)
     {
         Quaternion unityRotation = new Quaternion(
@@ -846,28 +1063,54 @@ public static class WorldVisualBridge
     }
 
     /// <summary>
-    /// LOD: do not merge the viewer/launch-site subtree below this altitude.
+    /// Earth LOD: do not merge the viewer/launch-site subtree below this altitude.
+    /// Moon uses <see cref="PlanetLodAltitudePolicy.GetViewerSubtreeProtectAltitudeMeters"/>.
     /// Not a planet-rotation lock.
     /// </summary>
-    public const double PadPlanetRotationLockAltitudeMeters = 30000.0;
+    public const double PadPlanetRotationLockAltitudeMeters =
+        PlanetLodAltitudePolicy.EarthViewerSubtreeProtectAltitudeMeters;
 
     /// <summary>
-    /// Displaced terrain radius under the launch site for pad scenarios. Must stay applied
-    /// for the whole ascent — dropping it at 5 km shifts the planet center and tears LOD.
+    /// Mesh height under the ship, so the globe offset matches vertex displacement.
+    /// Cove courtyard keeps pad-base flatten. Off the pad this is local GEBCO/LDEM,
+    /// not Cape height for the whole flight (that left the rocket hanging in air).
     /// </summary>
     internal static double GetPlanetSurfaceHeightOffsetMeters(Simulation simulation)
     {
-        if (simulation == null || !SimulationScenarios.IsAnySurfacePad(simulation.scenario))
+        if (simulation == null || simulation.ship == null)
         {
             return 0.0;
         }
 
-        if (!CelestialTerrainRuntime.ApplyLaunchSiteFlatten)
+        bool padScenario =
+            SimulationScenarios.IsAnySurfacePad(simulation.scenario) &&
+            CelestialTerrainRuntime.ApplyLaunchSiteFlatten;
+
+        if (padScenario && simulation.IsShipOnCoveLaunchPad())
+        {
+            return LaunchPadConstants.GetLaunchSitePadBaseHeightAboveSphereMeters();
+        }
+
+        Body terrainBody = simulation.GetVisualTerrainBody();
+
+        if (terrainBody == null)
         {
             return 0.0;
         }
 
-        return LaunchPadConstants.GetLaunchSitePadBaseHeightAboveSphereMeters();
+        global::SimVector3 radial = simulation.ship.GetCenterOfMassWorld()
+            .Subtract(terrainBody.position);
+
+        if (radial.LengthSquared() <= 1e-24)
+        {
+            return 0.0;
+        }
+
+        double heightMeters = PlanetSurfaceContact.GetHeightAboveSphereMeters(
+            terrainBody,
+            radial
+        );
+        return heightMeters * PlanetSpherifiedChunkMeshBuilder.ActiveVisualHeightScale;
     }
 
     public const float FlightCameraNearClip = 1.0f;
@@ -938,6 +1181,15 @@ public static class WorldVisualBridge
     public const double MapOrbitSimMetersMin =
         (PlanetSurfaceConstants.UnityFlightPlanetRadiusMeters +
          FlightSkyVisibilitySettings.AtmosphereShellHeightMeters) * 1.12;
+
+    /// <summary>
+    /// Ship-focused map: stay outside the vessel, not the whole atmosphere shell
+    /// measured from planet center.
+    /// </summary>
+    public const double MapShipOrbitSimMetersMin = 2_000.0;
+
+    /// <summary>First M / F on the vessel: regional view, not a 45 m chase leftover.</summary>
+    public const double MapShipOrbitSimMetersDefault = 800_000.0;
 
     /// <summary>
     /// Resolved per-frame render policy for the two independent visual worlds.

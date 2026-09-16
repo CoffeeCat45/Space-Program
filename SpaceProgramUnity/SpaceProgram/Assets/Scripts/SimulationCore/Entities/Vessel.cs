@@ -148,6 +148,11 @@ class Vessel : Body
             return false;
         }
 
+        if (SimulationCheatFlags.DisableCrashDamage)
+        {
+            return false;
+        }
+
         EnsureStageBlocks();
         SimVector3 outward = surfaceNormal.LengthSquared() > 1e-18 ?
             surfaceNormal.Normalize() :
@@ -185,7 +190,9 @@ class Vessel : Body
                     angularVelocity,
                     rBlockWorld
                 );
-                SimVector3 vContact = velocity.Add(rotationalVelocity);
+                SimVector3 vContact = velocity
+                    .Add(rotationalVelocity)
+                    .Subtract(surfaceBodyVelocity);
                 double contactSpeed = vContact.Length();
 
                 if (contactSpeed <= block.structuralStrength)
@@ -317,6 +324,11 @@ class Vessel : Body
         }
 
         NotifyShipLayoutChanged();
+        for (int i = 0; i < stages.Count; i++)
+        {
+            StageData.ReconcileScalarsFromBlocks(stages[i]);
+        }
+
         RecalculateMassAndDeltaV(localGravity);
 
         angularVelocity = SimVector3.ClampMagnitude(
@@ -331,6 +343,11 @@ class Vessel : Body
         double crashSpeedThreshold
     )
     {
+        if (SimulationCheatFlags.DisableCrashDamage)
+        {
+            return false;
+        }
+
         if (flightStatus != FlightStatus.Flying)
         {
             return IsDestroyed;
@@ -679,6 +696,23 @@ class Vessel : Body
         position = position.Add(comBefore.Subtract(comAfter));
     }
 
+    /// <summary>
+    /// World-space nose slerp with a radian cap. Used on Kepler coast warp so
+    /// SAS tracking cannot overshoot a 1–120 s step at 120 °/s.
+    /// </summary>
+    public void RotateNoseTowardWorld(SimVector3 worldDirection, double maxRadians)
+    {
+        VesselWarpAttitude.RotateNoseTowardWorld(
+            ref orientation,
+            ref position,
+            ref angularVelocity,
+            centerOfMassLocal,
+            worldDirection,
+            maxRadians
+        );
+        SyncHeadingFromOrientation();
+    }
+
     public void ApplyYawAngularAcceleration(double angularAcceleration, double dt)
     {
         ApplyOrientationTorque(
@@ -870,10 +904,10 @@ class Vessel : Body
             return 0.0;
         }
 
-        double blockThrust = 0.0;
-
         if (activeStage.blocks != null)
         {
+            double blockThrust = 0.0;
+
             for (int i = 0; i < activeStage.blocks.Count; i++)
             {
                 ShipBlock block = activeStage.blocks[i];
@@ -885,11 +919,18 @@ class Vessel : Body
 
                 blockThrust += Math.Max(0.0, block.maxThrustNewtons);
             }
+
+            return SimulationCheatFlags.ScaleThrustNewtons(blockThrust);
         }
 
         return SimulationCheatFlags.ScaleThrustNewtons(
-            blockThrust > 0.0 ? blockThrust : activeStage.thrust
+            Math.Max(0.0, activeStage.thrust)
         );
+    }
+
+    public bool HasLiveMainEngine()
+    {
+        return GetActiveEngineThrustNewtons() > 1e-9;
     }
 
     public SimVector3 GetAggregatedMainEngineThrustLocal(double throttle)
@@ -926,13 +967,6 @@ class Vessel : Body
 
             totalForceLocal = totalForceLocal.Add(
                 block.thrustDirection.Normalize().Multiply(engineThrust)
-            );
-        }
-
-        if (totalForceLocal.LengthSquared() <= 0.0 && activeStage.thrust > 0.0)
-        {
-            totalForceLocal = GetMainEngineThrustAxisLocal().Multiply(
-                activeStage.thrust * throttle
             );
         }
 
@@ -1241,7 +1275,7 @@ class Vessel : Body
         }
 
         activeStageMaxThrustToWeight =
-            activeStage.thrust / (totalMass * localGravity);
+            GetActiveEngineThrustNewtons() / (totalMass * localGravity);
 
         double endMass = totalMass - activeStage.fuelMass;
 
@@ -1941,10 +1975,7 @@ class Vessel : Body
 
     public double GetActiveStageThrust()
     {
-        StageData activeStage = GetActiveStage();
-        return activeStage == null ?
-            0.0 :
-            SimulationCheatFlags.ScaleThrustNewtons(activeStage.thrust);
+        return GetActiveEngineThrustNewtons();
     }
 
     public double GetActiveFuelConsumptionPerForceSecond()

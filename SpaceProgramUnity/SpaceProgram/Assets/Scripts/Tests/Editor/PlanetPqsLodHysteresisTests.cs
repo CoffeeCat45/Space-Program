@@ -171,6 +171,38 @@ public sealed class PlanetPqsLodHysteresisTests
                 0.15, 0.17,
                 out _,
                 out _));
+        Assert.IsTrue(PlanetPqsLodRules.FaceCenterPadNeedsCrossL1CatchUp(0.5, 0.5));
+        Assert.IsFalse(PlanetPqsLodRules.FaceCenterPadNeedsCrossL1CatchUp(0.39, 0.16));
+        Assert.IsTrue(
+            PlanetPqsLodRules.CatchUpProbeLeftViewerL1(0.49, 0.51, 0.50, 0.50));
+        Assert.IsFalse(
+            PlanetPqsLodRules.CatchUpProbeLeftViewerL1(0.51, 0.51, 0.50, 0.50));
+        Assert.AreEqual(
+            8,
+            PlanetPqsLodRules.FaceCenterCrossL1CatchUpRequired(
+                7, 8, 0.50, 0.50, 0.49, 0.51));
+        Assert.AreEqual(
+            7,
+            PlanetPqsLodRules.FaceCenterCrossL1CatchUpRequired(
+                7, 8, 0.50, 0.50, 0.51, 0.51));
+        Assert.AreEqual(
+            7,
+            PlanetPqsLodRules.FaceCenterCrossL1CatchUpRequired(
+                7, 8, 0.39, 0.16, 0.51, 0.16));
+        Assert.IsTrue(
+            PlanetPqsLodRules.NodeUvTouchesFaceCenter(0.5, 0.515625, 0.484375, 0.5));
+        Assert.IsFalse(
+            PlanetPqsLodRules.NodeUvTouchesFaceCenter(0.5, 0.5078125, 0.484375, 0.4921875));
+        Assert.IsTrue(
+            PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(true, true, 6, 8));
+        Assert.IsTrue(
+            PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(true, true, 7, 8));
+        Assert.IsFalse(
+            PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(true, true, 5, 8));
+        Assert.IsFalse(
+            PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(false, true, 6, 8));
+        Assert.IsFalse(
+            PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(true, false, 6, 8));
     }
 
     [Test]
@@ -300,11 +332,32 @@ public sealed class PlanetPqsLodHysteresisTests
         Assert.AreEqual(7, PlanetPqsLodRules.ClampCatchUpToRingCap(7, 5, false, 5));
         Assert.AreEqual(5, PlanetPqsLodRules.ClampCatchUpToRingCap(7, 5, false, 7));
         Assert.AreEqual(13, PlanetPqsLodRules.ClampCatchUpToRingCap(13, 13, false, 13));
+        Assert.IsTrue(PlanetPqsLodRules.AllowCatchUpFromLeaf(true, false));
+        Assert.IsTrue(PlanetPqsLodRules.AllowCatchUpFromLeaf(false, true));
+        Assert.IsFalse(PlanetPqsLodRules.AllowCatchUpFromLeaf(false, false));
+        Assert.IsTrue(
+            PlanetPqsLodRules.AngularRingParentShouldMerge(true, false));
+        Assert.IsFalse(
+            PlanetPqsLodRules.AngularRingParentShouldMerge(true, true));
+        Assert.IsFalse(
+            PlanetPqsLodRules.AngularRingParentShouldMerge(false, true));
         Assert.AreEqual(6, PlanetPqsLodRules.MinNeighborLevelToCloseCrack(7));
         Assert.IsFalse(PlanetPqsLodRules.AngularRingCapBlocksSplit(1, 1, true));
         Assert.IsTrue(PlanetPqsLodRules.AngularRingCapBlocksSplit(1, 1, false));
+        Assert.IsTrue(
+            PlanetPqsLodRules.AngularRingCapBlocksSplit(7, 7, true, false));
+        Assert.IsFalse(
+            PlanetPqsLodRules.AngularRingCapBlocksSplit(7, 7, true, true));
         Assert.IsFalse(PlanetPqsLodRules.AllowAngularRingMerge(true));
         Assert.IsTrue(PlanetPqsLodRules.AllowAngularRingMerge(false));
+        Assert.IsFalse(PlanetPqsLodRules.AngularRingMayMergeParent(true));
+        Assert.IsTrue(PlanetPqsLodRules.AngularRingMayMergeParent(false));
+        Assert.IsTrue(
+            PlanetPqsLodRules.NodeIsViewerFinestQuadMember(true, false));
+        Assert.IsTrue(
+            PlanetPqsLodRules.NodeIsViewerFinestQuadMember(false, true));
+        Assert.IsFalse(
+            PlanetPqsLodRules.NodeIsViewerFinestQuadMember(false, false));
     }
 
     [Test]

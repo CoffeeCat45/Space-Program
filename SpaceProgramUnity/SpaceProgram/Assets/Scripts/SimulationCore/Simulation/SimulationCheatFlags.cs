@@ -10,6 +10,9 @@ public static class SimulationCheatFlags
     /// <summary>Dev: freeze Earth sidereal spin; heliocentric orbit still runs.</summary>
     public static bool PlanetSpinDisabled;
 
+    /// <summary>Dev: ignore crash speed and block impact breakup.</summary>
+    public static bool DisableCrashDamage;
+
     public static double ScaleThrustNewtons(double thrustNewtons)
     {
         if (ThrustMultiplier == 1.0)

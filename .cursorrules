@@ -12,6 +12,7 @@
 6. После значимого шага: обновить `PROGRESS.md` + строка в `CHANGELOG.md`.
 7. `SimulationConsole` — не использовать (не в git). Проверка — Unity Play mode.
 8. Датасеты планет не в git — см. `GITHUB_HEAVY_FILES.md`.
+9. GitHub: origin `CoffeeCat45/Space-Program.git`; коммиты только `CoffeeCat45@users.noreply.github.com` (иначе GH007). Не `test1.git`, не личный Gmail.
 
 Якорь нового чата:
 @context/architecture/AI_CONTEXT.md @context/roadmap/PROGRESS.md

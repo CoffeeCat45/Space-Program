@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 /// <summary>
 /// Cube-sphere planet with per-face spherical quadtree LOD.
@@ -10,15 +11,10 @@ using UnityEngine;
     [DefaultExecutionOrder(250)]
 public sealed class FlightPlanetSphere : MonoBehaviour
 {
-    // Real RSS-Terrain elevation near the Cove coastline can swing 100+ meters within
-    // just a couple hundred meters (dunes/lagoon terrain), so the pad needs a wider safe
-    // zone than the original 180m/50m gave it. Keep this modest, though — the actual
-    // "ship spawns ~45m underground" bug turned out to be LaunchPadView using the wrong
-    // world point (padRoot's ground contact instead of the prefab's SpawnPoint marker),
-    // not missing terrain flattening, so there's no need to flatten a huge area and hide
-    // real nearby hills just to mask a problem that had a different cause.
-    public const float DefaultFlattenRadiusMeters = 340f;
-    public const float DefaultHardFlattenRadiusMeters = 90f;
+    // Flatten only the pad yard. Wider radii hid real dunes and were easy to confuse
+    // with pad visibility (now 100 m in LaunchPadConstants).
+    public const float DefaultFlattenRadiusMeters = 100f;
+    public const float DefaultHardFlattenRadiusMeters = 40f;
     public const int DefaultChunkVertexResolution = 24;
     public const float DefaultSplitDistanceMeters = 4000f;
     public const int DefaultMaxLodLevel = 15;
@@ -56,6 +52,12 @@ public sealed class FlightPlanetSphere : MonoBehaviour
     /// until the 640 cap (takeoff hitch, pad stuck at BUDGET). Cap it per tick.
     /// </summary>
     public const int HitchMaxNeighborSplitsPerFrame = 2;
+    /// <summary>
+    /// After pad warmup, stop the LOD walk once this much real time has elapsed.
+    /// Split/merge rules stay the same; leftover work continues next tick.
+    /// Bootstrap/warmup keep the count budget only so pad rings still fill.
+    /// </summary>
+    public const float HitchMaxLodTickMilliseconds = 6f;
     public const float DefaultViewerLookAheadSeconds = 2.5f;
     public const float MergeDistanceMultiplier = 1.5f;
     public const int DefaultMaxLodSplitsPerFrame = 8;
@@ -1444,7 +1446,8 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         return NeedsViewerPadLodBootstrap() ||
             (quadtree != null &&
                 (quadtree.ViewerNeighborhoodHasLodGap() ||
-                    quadtree.DiskHasUnfinishedLod()));
+                    quadtree.DiskHasUnfinishedLod() ||
+                    quadtree.FaceCenterL1sNeedViewerLod()));
     }
 
     bool IsLodBootstrapping()
@@ -1567,8 +1570,23 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             return;
         }
 
+        bool capTickTime = !IsLodBootstrapping() && !IsLodWarmupActive();
+        if (capTickTime)
+        {
+            quadtree.BeginLodTickTimeBudget(HitchMaxLodTickMilliseconds);
+        }
+
+        Profiler.BeginSample("FlightLod.Tick");
         quadtree.RefreshLodLookAhead(splitBudget, meshBudget, allowNeighborSync: true);
+        Profiler.EndSample();
+        if (capTickTime)
+        {
+            quadtree.ClearLodTickTimeBudget();
+        }
+
+        Profiler.BeginSample("FlightLod.FeedMeshes");
         quadtree.FeedPendingMeshQueue(meshBudget);
+        Profiler.EndSample();
         RememberIdleLodBaseline();
     }
 
@@ -1656,7 +1674,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             return;
         }
 
+        Profiler.BeginSample("FlightLod.DispatchMeshes");
         quadtree.DispatchCompletedMeshes();
+        Profiler.EndSample();
         SyncViewerLodFocusFromSimulation();
 
         if (PlanetLodAltitudePolicy.ShouldHideTerrainChunks(altitudeShellState))
@@ -1675,13 +1695,18 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             !IsLodWarmupActive() &&
             !NeedsViewerLodRefinement())
         {
+            Profiler.BeginSample("FlightLod.SyncCoverage");
             quadtree.SyncDrawnCoverage();
+            Profiler.EndSample();
             return;
         }
 
         if (ShouldSkipLodUpdatesForTimeWarp() && !bootstrapping)
         {
-            quadtree.SyncDrawnCoverage();
+            Profiler.BeginSample("FlightLod.Tick");
+            quadtree.CoarsenForAltitudeOnly();
+            Profiler.EndSample();
+            RememberIdleLodBaseline();
             return;
         }
 
@@ -1690,7 +1715,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
         int meshFeedBudget = bootstrapping || IsLodWarmupActive() ?
             meshBudget :
             Mathf.Max(1, meshBudget / 2);
+        Profiler.BeginSample("FlightLod.FeedMeshes");
         quadtree.FeedPendingMeshQueue(meshFeedBudget);
+        Profiler.EndSample();
 
         if (ShouldSkipIdleLodTick())
         {
@@ -1740,7 +1767,9 @@ public sealed class FlightPlanetSphere : MonoBehaviour
             BeginLodWarmup();
         }
 
+        Profiler.BeginSample("FlightLod.SyncCoverage");
         quadtree.SyncDrawnCoverage();
+        Profiler.EndSample();
 
         if (!showLodDebug)
         {

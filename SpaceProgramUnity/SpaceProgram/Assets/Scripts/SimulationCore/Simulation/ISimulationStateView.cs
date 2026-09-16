@@ -10,7 +10,11 @@ interface ISimulationStateView
 
     double GetShipHudSpeed();
 
+    ShipHudSpeedMode GetShipHudSpeedMode();
+
     string GetShipHudSpeedModeLabel();
+
+    void CycleShipHudSpeedMode();
 
     double GetShipAcceleration();
 

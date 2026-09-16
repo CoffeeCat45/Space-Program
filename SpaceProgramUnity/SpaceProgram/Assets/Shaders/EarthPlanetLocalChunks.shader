@@ -708,25 +708,60 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
                     0.0,
                     length(_WorldSpaceCameraPos - planetOriginWS) - _PlanetRadius
                 );
+                bool heightSlopeSplat = _SurfaceBlendMode > 0.5;
+                float worldScale = WorldHorizontalScale();
+                // Hardcoded — do not add a UnityPerMaterial field (Editor crash / white screen).
+                const float moonMacroUnifyAltitudeSimMeters = 8000.0;
+                float macroDriver = viewerAltitude;
+                if (heightSlopeSplat)
+                {
+                    // Pad: fragment distance so the horizon is LROC, not gray splat.
+                    // In flight an iso-distance mix is a growing disk under the ship.
+                    if (viewerAltitude < moonMacroUnifyAltitudeSimMeters)
+                    {
+                        float3 fragmentWS = TransformObjectToWorld(input.positionOS);
+                        macroDriver = length(_WorldSpaceCameraPos - fragmentWS);
+                    }
+                }
+
+                float macroBlend = smoothstep(
+                    _MacroBlendStart * worldScale,
+                    _MacroBlendEnd * worldScale,
+                    macroDriver
+                ) * _MacroBlendMax;
+                // Moon limb / high hop: LROC already dominates. Skip dual-sample
+                // splat (16+ taps) so the 32–60 km chunk disk does not tank GPU.
+                bool skipHeavyDetail = heightSlopeSplat &&
+                    (macroBlend > 0.55 || viewerAltitude > 15000.0);
 
                 half3 planetMacro = SampleEquirectAlbedo(
                     TEXTURE2D_ARGS(_PlanetColorMap, sampler_PlanetColorMap),
                     splatUv
                 );
-                // Biome from a coarser mip so NASA texels (~2 km) do not show as squares
-                // on the ground. Overlay color above still uses the sharp sample.
-                half3 planetMacroBiome = SAMPLE_TEXTURE2D_LOD(
-                    _PlanetColorMap,
-                    sampler_PlanetColorMap,
-                    splatUv,
-                    2.5
-                ).rgb;
+                half3 planetMacroBiome = planetMacro;
+                if (!heightSlopeSplat)
+                {
+                    // Biome from a coarser mip so NASA texels (~2 km) do not show as squares
+                    // on the ground. Overlay color above still uses the sharp sample.
+                    planetMacroBiome = SAMPLE_TEXTURE2D_LOD(
+                        _PlanetColorMap,
+                        sampler_PlanetColorMap,
+                        splatUv,
+                        2.5
+                    ).rgb;
+                }
 
                 float2 detailUv = BuildDetailTileUv(input.localMetersUv);
                 float2 detailDx = ddx(detailUv);
                 float2 detailDy = ddy(detailUv);
                 CorrectPeriodicUvGradients(DetailUvWrapPeriod(), detailDx, detailDy);
+                float3 layerWeights = float3(0.0, 1.0, 0.0);
+                float rockWeight = 0.0;
+                half3 detailAlbedo = planetMacro;
+                float waterMask = 0.0;
 
+                if (!skipHeavyDetail)
+                {
                 half3 lowDetail = SampleDetailAlbedo(
                     TEXTURE2D_ARGS(_LowAlbedo, sampler_LowAlbedo),
                     detailUv,
@@ -754,7 +789,6 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
 
                 float4 splat = SampleDetailSplat(detailUv, detailDx, detailDy);
                 float splatSum = splat.r + splat.g + splat.b;
-                bool heightSlopeSplat = _SurfaceBlendMode > 0.5;
                 if (splatSum <= 0.001)
                 {
                     splat.rgb = heightSlopeSplat ? float3(0.0, 1.0, 0.0) : float3(0.2, 0.7, 0.1);
@@ -772,12 +806,6 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
                     _SteepSlopeThreshold + 0.08,
                     steepSignal
                 );
-
-                float3 layerWeights;
-                float rockWeight;
-                half3 detailAlbedo;
-                float waterMask = 0.0;
-                float worldScale = WorldHorizontalScale();
 
                 if (heightSlopeSplat)
                 {
@@ -885,12 +913,7 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
                     );
                     waterMask = saturate(max(waterMask, macroOcean * coastFixBlend));
                 }
-
-                float macroBlend = smoothstep(
-                    _MacroBlendStart * worldScale,
-                    _MacroBlendEnd * worldScale,
-                    viewerAltitude
-                ) * _MacroBlendMax;
+                }
 
                 half3 landAlbedo = lerp(
                     detailAlbedo,
@@ -908,17 +931,21 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
                 float oceanDepthMeters = input.vertexColor.a > 0.5 ?
                     input.vertexColor.g * _OceanDepthPackMeters :
                     0.0;
-                half3 oceanAlbedo = SampleOceanAlbedo(
-                    splatUv,
-                    planetMacro,
-                    viewerAltitude,
-                    oceanDepthMeters
-                );
-                half3 finalAlbedo = lerp(landAlbedo, oceanAlbedo, waterMask);
+                half3 finalAlbedo = landAlbedo;
+                if (waterMask > 0.001)
+                {
+                    half3 oceanAlbedo = SampleOceanAlbedo(
+                        splatUv,
+                        planetMacro,
+                        viewerAltitude,
+                        oceanDepthMeters
+                    );
+                    finalAlbedo = lerp(landAlbedo, oceanAlbedo, waterMask);
+                }
 
                 float3 tangentNormal = float3(0.0, 0.0, 1.0);
 
-                if (_NormalStrength > 0.001)
+                if (!skipHeavyDetail && _NormalStrength > 0.001)
                 {
                     float3 lowNormal = SampleDetailNormal(
                         TEXTURE2D_ARGS(_LowNormal, sampler_LowNormal),
@@ -957,18 +984,21 @@ Shader "SpaceProgram/EarthPlanetLocalChunks"
                     );
                 }
 
-                tangentNormal = normalize(
-                    lerp(
-                        tangentNormal,
-                        SamplePlanetOceanNormal(
-                            input.localMetersUv,
-                            splatUv,
-                            TransformObjectToWorld(input.positionOS),
-                            oceanDepthMeters
-                        ),
-                        waterMask
-                    )
-                );
+                if (waterMask > 0.001)
+                {
+                    tangentNormal = normalize(
+                        lerp(
+                            tangentNormal,
+                            SamplePlanetOceanNormal(
+                                input.localMetersUv,
+                                splatUv,
+                                TransformObjectToWorld(input.positionOS),
+                                oceanDepthMeters
+                            ),
+                            waterMask
+                        )
+                    );
+                }
 
                 float3 tangentWS;
                 float3 bitangentWS;

@@ -57,6 +57,15 @@ public static class PlanetBiomeTerrainConfig
     public const float MacroSatelliteBlendEndMeters = 70000f;
     public const float MacroSatelliteMaxBlend = 0.16f;
 
+    /// <summary>
+    /// Moon LROC overlay vs camera-to-fragment distance. Shader still multiplies by
+    /// worldScale (R / 6371 km), so these real-meter values become ~12 km / ~38 km sim
+    /// on the 1:10 Moon. Limb and high hops show the photo map, not gray splat.
+    /// </summary>
+    public const float MoonMacroBlendStartRealMeters = 440000f;
+    public const float MoonMacroBlendEndRealMeters = 1394000f;
+    public const float MoonMacroBlendMax = 0.9f;
+
     public const float GroundAmbientFloor = 0.08f;
 
     /// <summary>

@@ -169,7 +169,10 @@ public static class PlanetDistantVisualPolicy
         double centerDistance = planetRadius +
             comAltitude +
             surfaceHeightAboveSphereMeters;
-        double farLimb = centerDistance + planetRadius + AtmosphereShellHeightMeters;
+        double atmospherePadding = CelestialTerrainRuntime.IsMoon ?
+            0.0 :
+            AtmosphereShellHeightMeters;
+        double farLimb = centerDistance + planetRadius + atmospherePadding;
         double clipBudget = WorldVisualBridge.FlightCameraFarClip * FarClipFill;
 
         if (farLimb <= clipBudget || farLimb <= 1.0)
@@ -177,7 +180,7 @@ public static class PlanetDistantVisualPolicy
             return 1f;
         }
 
-        return (float)(clipBudget / farLimb);
+        return Mathf.Clamp((float)(clipBudget / farLimb), 0.002f, 1f);
     }
 
     /// <summary>

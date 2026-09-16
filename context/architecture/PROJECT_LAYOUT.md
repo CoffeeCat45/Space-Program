@@ -27,7 +27,7 @@
 | `Build\` | Локальный Windows-плеер с картами, не в git |
 | `ShareBuild\` | Копия плеера без GEBCO/PNG/RSS (после Build Windows Player), не в git |
 
-Unity-проект живёт **внутри** репозитория. GitHub — **код и доки без датасетов** (карты/высоты/DDS только на этом ПК). См. `GITHUB_HEAVY_FILES.md`.
+Unity-проект живёт **внутри** репозитория. GitHub — **код и доки без датасетов** (карты/высоты/DDS только на этом ПК). Remote: `https://github.com/CoffeeCat45/Space-Program.git`. См. `GITHUB_HEAVY_FILES.md`.
 
 **ReStock / Pipeline:** исходники `.mu` и Blender-скрипты — в `Не используемые\ReStock` и `Не используемые\Pipeline`. В игре уже `Assets/Prefabs/Parts`. Повторный импорт — [[systems/RESTOCK_PIPELINE.md]].
 
@@ -38,7 +38,7 @@ Unity-проект живёт **внутри** репозитория. GitHub �
 - Сборка: `PlayerContentBuildProcessor` копирует JSON к exe и в `StreamingAssets`; префабы — `RuntimePartCatalog` в Resources. После Windows Build — `ShareBuildExporter` кладёт лёгкую копию в `ShareBuild/` (без карт, с Editor `settings.json`). Обновить карты в уже собранном `Build/` без нового BuildPipeline: **Space Program → Update Heavy Build Data**.
 - RSS DDS (`Assets/Content/Environment/…`) в Editor читаются с диска; в плеер копируются в `StreamingAssets/Content/` при Build. **Не в git.**
 
-**Настройки (графика / HUD / разработчик):** `settings.json` в `VabFileSystem.GameDirectory` (рядом с `Assets/` в Editor, рядом с `.exe` в плеере). Первый запуск копирует старые PlayerPrefs в файл. F5 и `Ships/` — отдельные файлы. Режим окна (оконный / полный экран / безрамочный) — поле `graphics.displayMode`. Экран загрузки LOD — `play.showLodLoadingScreen`. Экспорт ShareBuild копирует этот файл как есть (HUD с диска; если HUD уже загружен в Editor — сначала flush).
+**Настройки (графика / HUD / debug / разработчик):** `settings.json` в `VabFileSystem.GameDirectory` (рядом с `Assets/` в Editor, рядом с `.exe` в плеере). Первый запуск копирует старые PlayerPrefs в файл. F5 и `Ships/` — отдельные файлы. Режим окна (оконный / полный экран / безрамочный) — поле `graphics.displayMode`. Экран загрузки LOD — `play.showLodLoadingScreen`. Видимость debug-хрома (FPS, камера, кнопки) — `debug.hiddenOverlays`. Экспорт ShareBuild копирует этот файл как есть (HUD/debug с диска; если уже загружены в Editor — сначала flush).
 
 ---
 
@@ -252,6 +252,8 @@ Map / SoI / dev toggles — [[systems/MAP_MODE_ORBIT_SOI.md]].
 | `ReStockBatchParts`       | static class  | `Editor/ReStockBatchParts.cs`                     | Part definitions из архива `Не используемые/Pipeline/Parts` + manifest                            |
 | `ReStockPilotEditorMenus` | Editor static | `Editor/ReStockPilotEditorMenus.cs`               | Меню **ReStock → 8/9/10**                                                  |
 | `ReStockModelImportPostprocessor` | class | `Editor/ReStockImportPipeline.cs` (nested) | `AssetPostprocessor`: UV flip, import settings для pilot OBJ               |
+| `CustomPartImportPipeline`  | Editor static | `Editor/CustomPartImportPipeline.cs`            | Свои OBJ+PBR PNG → URP Lit + container prefab (без KSP UV-flip)            |
+| `CustomPartImporterWindow`  | EditorWindow  | `Editor/CustomPartImporterWindow.cs`            | Меню **Parts → Custom Part Importer**                                      |
 
 
 ### UnityAdapter — Прочее

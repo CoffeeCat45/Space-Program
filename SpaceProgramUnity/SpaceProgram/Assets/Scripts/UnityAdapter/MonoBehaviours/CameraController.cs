@@ -22,6 +22,7 @@ public class CameraController : MonoBehaviour
 
     public Func<Transform, Transform> ResolveFocusRoot;
     public Func<Vector2, Transform> ResolveMapClick;
+    public Func<Transform, bool> AcceptFocusTarget;
     public event Action<Transform> FocusTargetChanged;
 
     Transform target;
@@ -51,6 +52,18 @@ public class CameraController : MonoBehaviour
     double targetOrbitDistanceSimMeters = 45.0;
     double currentOrbitDistanceUnity = 45.0;
     double targetOrbitDistanceUnity = 45.0;
+
+    bool hasStoredFlightOrbit;
+    float storedFlightYaw;
+    float storedFlightPitch;
+    float storedFlightRoll;
+    double storedFlightDistanceUnity = 45.0;
+    Quaternion storedFlightOrbitFrame = Quaternion.identity;
+    bool storedFlightHasOrbitFrame;
+    bool hasStoredMapOrbit;
+    float storedMapYaw;
+    float storedMapPitch;
+    double storedMapDistanceSimMeters = 100_000.0;
 
     double? normalOrbitUnityMinOverride;
     double? normalOrbitUnityMaxOverride;
@@ -85,16 +98,33 @@ public class CameraController : MonoBehaviour
 
     public void SetTarget(Transform newTarget)
     {
+        SetTarget(newTarget, updateDefault: false);
+    }
+
+    public void SetTarget(Transform newTarget, bool updateDefault)
+    {
         target = newTarget;
 
-        if (defaultTarget == null)
+        if (defaultTarget == null || updateDefault)
         {
             defaultTarget = newTarget;
         }
     }
 
+    /// <summary>
+    /// Extra orbit frame on top of zenith-up. Horizon rig uses identity.
+    /// Vessel rig uses the ship's visual rotation so yaw/pitch stay on the nose.
+    /// </summary>
     public void SetOrbitFrameRotation(Quaternion frameRotation)
     {
+        if (hasOrbitFrameRotation)
+        {
+            frameRotation = WorldVisualBridge.PickNearestQuaternion(
+                orbitFrameRotation,
+                frameRotation
+            );
+        }
+
         orbitFrameRotation = frameRotation;
         hasOrbitFrameRotation = true;
     }
@@ -103,6 +133,42 @@ public class CameraController : MonoBehaviour
     {
         orbitFrameRotation = Quaternion.identity;
         hasOrbitFrameRotation = false;
+    }
+
+    /// <summary>
+    /// Switch chase frame without jumping the current Game view.
+    /// </summary>
+    public void SetOrbitFrameKeepingWorldView(Quaternion newFrame)
+    {
+        Vector3 worldOffset = GetOrbitOffsetDirection();
+        SetOrbitFrameRotation(newFrame);
+        Quaternion frame = ResolveOrbitFrameRotation();
+        Vector3 localOffset = Quaternion.Inverse(frame) * worldOffset;
+        WorldVisualBridge.FlightOrbitOffsetToYawPitch(
+            localOffset,
+            out orbitYaw,
+            out orbitPitch
+        );
+        orbitPitch = Mathf.Clamp(orbitPitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
+        RecaptureRollFromCurrentPose();
+        SnapOrbitNextUpdate();
+    }
+
+    void RecaptureRollFromCurrentPose()
+    {
+        Vector3 look = -GetOrbitOffsetDirection();
+        if (look.sqrMagnitude <= 1e-8f)
+        {
+            shipRollDegrees = 0.0f;
+            return;
+        }
+
+        Vector3 frameUp = ResolveOrbitUpReference();
+        shipRollDegrees = WorldVisualBridge.SignedOrbitRollDegrees(
+            look,
+            frameUp,
+            transform.rotation * Vector3.up
+        );
     }
 
     public void UpdateShipFollow(
@@ -115,6 +181,8 @@ public class CameraController : MonoBehaviour
         useChaseCamera = false;
         useExplicitPivot = true;
         explicitPivotPosition = pivotWorldPosition;
+        // Roll is owned by SoI preserve / Recapture / double-RMB reset.
+        // Callers pass GetOrbitRollDegrees() so a 0 here cannot wipe it.
         shipRollDegrees = rollDegrees;
         positionScaleForZoom = Mathf.Max(1e-8f, positionScale);
         autoBoundsRadius = Mathf.Max(
@@ -170,12 +238,11 @@ public class CameraController : MonoBehaviour
         }
 
         Vector3 localOffset = Quaternion.Inverse(frameRotation) * offset.normalized;
-        float horizontalDistance = Mathf.Sqrt(
-            localOffset.x * localOffset.x +
-            localOffset.z * localOffset.z
+        WorldVisualBridge.FlightOrbitOffsetToYawPitch(
+            localOffset,
+            out orbitYaw,
+            out orbitPitch
         );
-        orbitYaw = Mathf.Atan2(localOffset.x, -localOffset.z) * Mathf.Rad2Deg;
-        orbitPitch = Mathf.Atan2(localOffset.y, horizontalDistance) * Mathf.Rad2Deg;
         orbitPitch = Mathf.Clamp(orbitPitch, GetActiveMinOrbitPitch(), GetActiveMaxOrbitPitch());
 
         float desiredDistance = offset.magnitude;
@@ -221,42 +288,94 @@ public class CameraController : MonoBehaviour
 
     public void SetMapModeActive(bool active, float positionScale)
     {
+        float scale = Mathf.Max(1e-8f, positionScale);
         if (
             isMapModeActive == active &&
-            Mathf.Approximately(positionScaleForZoom, positionScale)
+            Mathf.Approximately(positionScaleForZoom, scale)
         )
         {
             return;
         }
 
+        if (active && !isMapModeActive)
+        {
+            StoreFlightOrbit();
+        }
+        else if (!active && isMapModeActive)
+        {
+            StoreMapOrbit();
+        }
+
         isMapModeActive = active;
-        positionScaleForZoom = Mathf.Max(1e-8f, positionScale);
+        positionScaleForZoom = scale;
 
         if (isMapModeActive)
         {
             useChaseCamera = false;
             ClearOrbitFrameRotation();
             mapOrbitDistanceFloorSimMeters = WorldVisualBridge.MapOrbitSimMetersMin;
-            double unityDistance = currentOrbitDistanceUnity;
-            double simMeters = positionScaleForZoom > 0.0f ?
-                unityDistance / positionScaleForZoom :
-                unityDistance;
-            targetOrbitDistanceSimMeters = Math.Max(
-                simMeters,
-                WorldVisualBridge.MapOrbitSimMetersMin
-            );
+            RestoreMapOrbitIfStored();
         }
         else
         {
-            double mapUnity = currentOrbitDistanceSimMeters * positionScaleForZoom;
-            targetOrbitDistanceUnity = ClampNormalOrbitUnity(mapUnity);
+            RestoreFlightOrbitIfStored();
         }
 
-        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(targetOrbitDistanceSimMeters);
-        targetOrbitDistanceUnity = ClampNormalOrbitUnity(targetOrbitDistanceUnity);
-        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
-        currentOrbitDistanceUnity = targetOrbitDistanceUnity;
         ApplyCameraClipPlanes();
+    }
+
+    public bool HasStoredMapOrbit => hasStoredMapOrbit;
+
+    void StoreFlightOrbit()
+    {
+        storedFlightYaw = orbitYaw;
+        storedFlightPitch = orbitPitch;
+        storedFlightRoll = shipRollDegrees;
+        storedFlightDistanceUnity = currentOrbitDistanceUnity;
+        storedFlightOrbitFrame = orbitFrameRotation;
+        storedFlightHasOrbitFrame = hasOrbitFrameRotation;
+        hasStoredFlightOrbit = true;
+    }
+
+    void StoreMapOrbit()
+    {
+        storedMapYaw = orbitYaw;
+        storedMapPitch = orbitPitch;
+        storedMapDistanceSimMeters = currentOrbitDistanceSimMeters;
+        hasStoredMapOrbit = true;
+    }
+
+    void RestoreFlightOrbitIfStored()
+    {
+        if (!hasStoredFlightOrbit)
+        {
+            return;
+        }
+
+        SetOrbitAngles(storedFlightYaw, storedFlightPitch);
+        shipRollDegrees = storedFlightRoll;
+        if (storedFlightHasOrbitFrame)
+        {
+            SetOrbitFrameRotation(storedFlightOrbitFrame);
+        }
+        else
+        {
+            ClearOrbitFrameRotation();
+        }
+        targetOrbitDistanceUnity = ClampNormalOrbitUnity(storedFlightDistanceUnity);
+        currentOrbitDistanceUnity = targetOrbitDistanceUnity;
+    }
+
+    void RestoreMapOrbitIfStored()
+    {
+        if (!hasStoredMapOrbit)
+        {
+            return;
+        }
+
+        SetOrbitAngles(storedMapYaw, storedMapPitch);
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(storedMapDistanceSimMeters);
+        currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
     }
 
     /// <summary>
@@ -267,6 +386,116 @@ public class CameraController : MonoBehaviour
         snapOrbitNextLateUpdate = true;
         currentOrbitDistanceUnity = targetOrbitDistanceUnity;
         currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
+    }
+
+    /// <summary>
+    /// Keep the chase offset glued to the ship when the flight universe jumps
+    /// (Earth↔Moon SoI). Live yaw/pitch stay identity-frame — not Mesh-to-flight
+    /// and not Q/E. Map live orbit is left alone; stored flight orbit still follows.
+    /// </summary>
+    public void PreserveOrbitThroughWorldReorientation(
+        Quaternion worldDelta,
+        bool applyToLiveOrbit
+    )
+    {
+        worldDelta = WorldVisualBridge.PickNearestQuaternion(
+            Quaternion.identity,
+            worldDelta
+        );
+
+        if (hasStoredFlightOrbit)
+        {
+            ApplyWorldDeltaToYawPitch(
+                worldDelta,
+                Quaternion.identity,
+                ref storedFlightYaw,
+                ref storedFlightPitch,
+                ref storedFlightRoll,
+                minOrbitPitch,
+                maxOrbitPitch
+            );
+        }
+
+        if (!applyToLiveOrbit || isMapModeActive)
+        {
+            return;
+        }
+
+        ApplyWorldDeltaToYawPitch(
+            worldDelta,
+            ResolveOrbitFrameRotation(),
+            ref orbitYaw,
+            ref orbitPitch,
+            ref shipRollDegrees,
+            GetActiveMinOrbitPitch(),
+            GetActiveMaxOrbitPitch()
+        );
+        SnapOrbitNextUpdate();
+    }
+
+    public Vector3 GetOrbitOffsetDirection()
+    {
+        return ResolveOrbitRotation() * Vector3.back;
+    }
+
+    public Vector3 GetFollowPivotWorldPosition()
+    {
+        if (useExplicitPivot)
+        {
+            return explicitPivotPosition;
+        }
+
+        if (target != null)
+        {
+            return target.position;
+        }
+
+        return transform.position;
+    }
+
+    public void GetOrbitAngles(out float yaw, out float pitch)
+    {
+        yaw = orbitYaw;
+        pitch = orbitPitch;
+    }
+
+    public float GetOrbitRollDegrees()
+    {
+        return shipRollDegrees;
+    }
+
+    static void ApplyWorldDeltaToYawPitch(
+        Quaternion worldDelta,
+        Quaternion orbitFrame,
+        ref float yaw,
+        ref float pitch,
+        ref float rollDegrees,
+        float minPitch,
+        float maxPitch
+    )
+    {
+        Quaternion localOrbit = Quaternion.Euler(pitch, yaw, 0.0f);
+        Vector3 oldOffset = (orbitFrame * localOrbit) * Vector3.back;
+        Vector3 oldLook = -oldOffset;
+        Vector3 oldUp = Quaternion.LookRotation(
+            oldLook.sqrMagnitude > 1e-8f ? oldLook.normalized : Vector3.forward,
+            orbitFrame * Vector3.up
+        ) * Quaternion.Euler(0.0f, 0.0f, rollDegrees) * Vector3.up;
+        Vector3 newOffset = worldDelta * oldOffset;
+        Vector3 newLook = -newOffset;
+        Vector3 newUp = worldDelta * oldUp;
+        Vector3 localOffset = Quaternion.Inverse(orbitFrame) * newOffset;
+        WorldVisualBridge.FlightOrbitOffsetToYawPitch(
+            localOffset,
+            out yaw,
+            out pitch
+        );
+        pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        rollDegrees = WorldVisualBridge.SignedOrbitRollDegrees(
+            newLook,
+            orbitFrame * Vector3.up,
+            newUp
+        );
     }
 
     public bool IsMapModeActive => isMapModeActive;
@@ -289,6 +518,18 @@ public class CameraController : MonoBehaviour
         return target.name;
     }
 
+    public bool IsChaseCameraActive => useChaseCamera;
+
+    public Quaternion GetResolvedOrbitFrameRotation()
+    {
+        return ResolveOrbitFrameRotation();
+    }
+
+    public float GetOrbitDistanceUnity()
+    {
+        return GetOrbitDistance();
+    }
+
     public bool IsFocusedOnDefaultTarget()
     {
         return target == defaultTarget;
@@ -305,6 +546,10 @@ public class CameraController : MonoBehaviour
         snapChaseCameraNextFrame = false;
         isMapModeActive = false;
         ClearOrbitFrameRotation();
+        hasStoredFlightOrbit = false;
+        storedFlightHasOrbitFrame = false;
+        storedFlightOrbitFrame = Quaternion.identity;
+        hasStoredMapOrbit = false;
         currentOrbitDistanceUnity = 45.0;
         targetOrbitDistanceUnity = 45.0;
         currentOrbitDistanceSimMeters = 100_000.0;
@@ -465,6 +710,13 @@ public class CameraController : MonoBehaviour
         currentOrbitDistanceSimMeters = targetOrbitDistanceSimMeters;
     }
 
+    public void SetMapOrbitDistanceFloorSimMeters(double minSimMeters)
+    {
+        mapOrbitDistanceFloorSimMeters = Math.Max(1_000.0, minSimMeters);
+        targetOrbitDistanceSimMeters = ClampMapOrbitSimMeters(targetOrbitDistanceSimMeters);
+        currentOrbitDistanceSimMeters = ClampMapOrbitSimMeters(currentOrbitDistanceSimMeters);
+    }
+
     /// <summary>
     /// After focusing the planet globe, enforce exterior orbit distance (sim meters).
     /// </summary>
@@ -607,6 +859,11 @@ public class CameraController : MonoBehaviour
 
         if (newTarget != null)
         {
+            if (AcceptFocusTarget != null && !AcceptFocusTarget(newTarget))
+            {
+                return;
+            }
+
             target = newTarget;
             FocusTargetChanged?.Invoke(target);
         }
@@ -634,6 +891,7 @@ public class CameraController : MonoBehaviour
 
         orbitYaw = 0.0f;
         orbitPitch = 0.0f;
+        shipRollDegrees = 0.0f;
     }
 
     Transform GetClickedFocusTarget()
@@ -941,21 +1199,13 @@ public class CameraController : MonoBehaviour
 
     Quaternion ResolveOrbitFrameRotation()
     {
-        if (isMapModeActive)
-        {
-            return Quaternion.identity;
-        }
-
         if (hasOrbitFrameRotation)
         {
             return orbitFrameRotation;
         }
 
-        if (target != null)
-        {
-            return target.rotation;
-        }
-
+        // Horizon / zenith +Y for pad and flying. Never fall back to vessel
+        // rotation or inertial Mesh-to-flight (that rolls Game vs Scene).
         return Quaternion.identity;
     }
 

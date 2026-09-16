@@ -4,6 +4,7 @@
 > **Эталон старта на паде 🔒 (не править split/merge/догон «улучшая» кольца):** [[systems/LOD_BASELINE_PAD_START.md]]  
 > **Океан на чанках:** [[systems/OCEAN.md]] · **атмосфера / облака:** [[systems/ATMOSPHERE_CLOUDS.md]]  
 > **Симптомы / F8 / тупики (живой):** [[systems/LOD_FAILURES.md]]  
+> Split/merge/догон — cube UV / горизонт / RING на любом теле (§5.2.1). Нет `if (Moon)` / `if (Earth)`.  
 > **История (закрыто):** [[history/lod_problem.md]] — cube-sphere inverse **исправлен 2026-08-07**.  
 > **Долгосрочный план PQS (архив):** [[history/terrain_plan.md]].
 
@@ -83,6 +84,8 @@ FlightPlanetSphere (250)      — SyncViewerLodFocusFromSimulation
 
 Focus direction обновляется **каждый кадр** после движения планеты.
 
+**Profiler (Play):** CPU Hierarchy → `FlightLod.Tick` (quadtree split/merge). After warmup the walk stops at ~6 ms and leftover splits continue next tick; new child meshes attach via `FeedMeshes` (not 16 sync builds inside `Split`). `DispatchMeshes` — CPU mesh jobs. `SyncCoverage` — parent/child swap. Tick Self used to be 50–140 ms from `Mesh.vertices` + stitch clones; vertices are cached. Если Tick мал, а кадр всё равно дорогой — GPU: `EarthPlanetLocalChunks`. F8: `chunks=` / 640 и `maxL`.
+
 **🔒 Поворот планеты / A/D:** `GetFlightPlanetLocalRotation` = ship `FromTo(sim→+Y)` × `FromTo(mesh→sim)`. Не инвертировать yaw в Core. Канон: [[systems/work_terrain.md]] §3.1.
 
 ---
@@ -125,6 +128,20 @@ Debug-сетка LOD — **local space** чанка (как меш).
 
 **LOD DIAG** (левый верх, скрыт до **F8**): почему каждая четверть 2×2 не split/mesh. F8 → панель + Console. Shift+F8 скрывает.
 
+### 5.2.1 Инварианты 2026-09-12 (все тела, не хаки планет)
+
+Правила в `PlanetPqsLodRules` — **cube UV, горизонт, лист корабля, RING**. Нет `if (Moon)` / `if (Earth)`. Луна и мыс — разные **точки на грани**, один алгоритм.
+
+| Правило | Срабатывает когда | Зачем |
+|---------|-------------------|--------|
+| Догон через шов L1 до LOD корабля | \|u−0.5\| и \|v−0.5\| ≤ 1/32 грани (четыре L1 сходятся) | Pad на **центре грани** (лунный спавн между 4 чанками). Мыс `uv≈0.39,0.16` **не** входит — регрессия, что Cape не сверлят |
+| Не RING-merge внутренние L6–L8 у 0.5,0.5 | тот же порог + клетка касается шва 0.5 | Иначе догон L8 сразу схлопывается (`lastFlap split\|merge`) |
+| После maxL догон только от листа `V` | `ViewerLeafNeedsSplit()==false` | Иначе каждое L7 кольца режет кузенов (на Земле L5 **в диске**, на Луне те же L5 часто за лимбом) |
+| RING-merge 2×2 | все не-exempt дети сверх капа, не один дальний | Смешанный 2×2 (у пада cap=7, снаружи cap=0) не схлопывать |
+| Не RING-merge поддерево с кораблём | UV корабля внутри узла | Pad 2×2 (`parentL7` 4×finest) не merge/split каждый тик |
+
+Проверка: Луна `uv≈0.500,0.500` `L1q 8/8/8/8` `flap 0`; мыс `uv≈0.390,0.159` `flap 0`. Эталон колец на паде 🔒 [[LOD_BASELINE_PAD_START.md]] — не переписывать split/merge «улучшая» Луну.
+
 ### 5.3 Обычный split — screen-space error на диске корабля
 
 ```
@@ -142,15 +159,15 @@ Split если `nodeSpan > targetSpan` и ближайшая точка чанк
 
 **За камерой:** дерево **не** схлопывается. Unity frustum-culls draw. Память на диск дешевле, чем spike при каждом обороте.
 
-**Idle skip:** если корабль сдвинулся < 2.5 m и высота < 3 m, полный `RefreshLodLookAhead` / feed очереди не бежит. Поворот камеры это не триггерит. Skip **не** действует, пока bootstrap/warmup, на диске есть лист без меша или лист, который ещё хочет split и **есть слот в бюджете** (`DiskHasUnfinishedLod`), нет меша под кораблём, pad > 64 m, gap > 1, чанков ≥ 640, или прошлый тик ещё хотел split/mesh. `gate=BUDGET` сам по себе не держит refine.
+**Idle skip:** если корабль сдвинулся < 2.5 m и высота < 3 m, полный `RefreshLodLookAhead` / feed очереди не бежит. Поворот камеры это не триггерит. Skip **не** действует, пока bootstrap/warmup, `DiskHasUnfinishedLod`, нет меша под кораблём, pad грубее finest, gap > 1, чанков ≥ 640, прошлый тик ещё хотел split/mesh, или на центре грани какой-то L1 грубее листа корабля. Split/merge/догон после прогрева — §5.2.1. F8: `flap s=/m=` оба 0.
 
-**Посадка после высоты:** PNG-шелл и collapse в L0 на ~0.12 R (Луна ~21 км, Земля ~76 км). Раньше сглаженная высота оставалась орбитальной → max LOD = 0, меши не строились. Теперь snap к фактической высоте + bootstrap при возврате чанков. Земля — тот же баг, выше порог.
+**Посадка после высоты:** PNG-шелл и collapse в L0: Земля ~0.12 R (~76 км); Луна: coarsen с ~2 км, L2 **~48 км** (не 21 км: иначе с 23 км весь диск — плитки 87 км, шар, потом RING сносит остальное разом), L0 **72 км**, PNG ~75 км. шелл вкл/выкл по фактической высоте (не сглаженной); чанки снова с ~62 км на спуске. Поддерево под кораблём на Луне не merge по SSE до L2 (~48 км); потолок высоты всё равно режет max LOD. Force-split 64 м на Луне гаснет с coarsen start (~2 км), не с 48 км — иначе split дрался с капом (дыры 1–3 плитки, не 2×2). Timewarp >×4: только coarsen/merge, без split (не копить выгрузку до x1).
 
 **Старт / прогрев:** Play после позы зовёт `PrimeFlightTerrainLod`. На диске меши **синхронные только в bootstrap** (warmup — async). Bootstrap не кончается, пока pad грубее finest possible (даже после 180 кадров). Пауза **не** стопит bootstrap/догон. Когда `gap=1` (сосед **на диске**, не L2 за лимбом), 2 split резерв на догон. Пока клетка под кораблём хочет split — дальние SSE не берут слоты; merge при капе трогает диск, не только «мельче viewer».
 
 **SoI Earth↔Moon:** не `Destroy` дерева и не `Prime` в том же кадре. Старое тело hibernate (чанки в RAM), новое стримит с обычным бюджетом кадра; GEBCO/LDEM и splat-паки кэшируются. Как Scaled Space + PQS в KSP.
 
-**1% lows:** merge ≤ 2/тик (altitude-cap merge без этого лимита); GPU upload ≤ 2 меша/кадр; Load Speed выше 4 не увеличивает hitch; догон соседей ≤ 2 split/тик; пауза (`P`) стопит LOD только когда диск уже готов (bootstrap/warmup/gap всё равно тикают); пустой feed не обходит дерево; после hitch физика не делает sim×2 в том же кадре.
+**1% lows:** merge ≤ 2/тик (altitude-cap merge без этого лимита); GPU upload ≤ 2 меша/кадр; Load Speed выше 4 не увеличивает hitch; догон соседей ≤ 2 split/тик; пауза (`P`) стопит LOD только когда диск уже готов (bootstrap/warmup/gap всё равно тикают); timewarp >×4 не стопит coarsen; пустой feed не обходит дерево; после hitch физика не делает sim×2 в том же кадре.
 
 При бюджете 640: сначала merge дальних 2×2 (не pad, без crack), потом split у корабля, потом догон. Слайдер **Detail reach влево** = мельче плитки дальше от корабля → диск съедает 640 на L8–L9 (`viewerSpan=679m`, `needL=14`).
 
@@ -238,8 +255,8 @@ Crack prevention: сосед **за горизонтом** не блокируе
 | 0 – 0.8% | 0 – 5 км | Полный ground max LOD |
 | 0.8% – 4% | 5 – 25 км | Max LOD падает к 2, targetSpan × до 24 |
 | 4% – 8% | 25 – 51 км | Max LOD → 0, агрессивный merge |
-| ≥ 12% | ≥ 76 км | PNG-shell (`earth_geographic.png`); GEBCO-чанки скрыты |
-| ≤ 10% | ≤ 64 км | GEBCO-чанки снова (спуск; гистерезис, без двойного глобуса) |
+| ≥ 12% | ≥ 76 км | Земля: PNG-shell; GEBCO скрыты. Луна: PNG с **~75 км** (после L0 на 72 км) |
+| ≤ 10% | ≤ 64 км | Земля: GEBCO снова. Луна: чанки с **~62 км** на спуске |
 
 Раньше `GetActiveMaxLodLevel` был **инвертирован**: выше 30 км разрешал max LOD 15 вместо
 упрощения — отсюда «на высоте чанки не упрощаются».
@@ -251,7 +268,7 @@ Crack prevention: сосед **за горизонтом** не блокируе
 
 Камера полёта: near 1 м, far **2 500 000 м**. Дальний край Земли ≈ высота + 2R. Около **1 млн м** диск начинает срезаться клипом — PNG «пропадает». Это не смена суток.
 
-`PlanetDistantVisualPolicy` + `WorldVisualBridge.GetFlightDistantVisualScale`: глобус **сжимается и подтягивается** к кораблю, угловой размер тот же, внутри far clip. Поворот планеты не меняется ([[systems/PLANET_SPIN.md]]).
+`PlanetDistantVisualPolicy` + `WorldVisualBridge.GetFlightDistantVisualScale`: **только LOD-глобус** сжимается и подтягивается к кораблю (угловой размер тот же, внутри far clip). `FlightUniverseRoot` не масштабировать — с Луны это тащило Землю и «крутило» фон до входа в SoI Земли. Поворот планеты не меняется ([[systems/PLANET_SPIN.md]]).
 
 | Высота | Картинка |
 |--------|----------|

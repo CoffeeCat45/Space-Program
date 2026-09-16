@@ -11,6 +11,7 @@ public static class GalaxySkyboxEnvironment
 
     static Material cachedMaterial;
     static Material runtimeSkyboxMaterial;
+    static Quaternion lastSkyRotation = Quaternion.identity;
 
     public static bool TryApply(Camera camera)
     {
@@ -109,6 +110,36 @@ public static class GalaxySkyboxEnvironment
             FlightSkyVisibilitySettings.MapModeSkyboxExposure
         );
         runtimeSkyboxMaterial.SetColor("_Tint", Color.white);
+        ApplySkyboxRotation(Quaternion.identity);
+    }
+
+    /// <summary>
+    /// Rotates the galaxy cubemap in Unity. Identity = cubemap axes = world.
+    /// Flight passes inertial-to-flight so stars stay in space, not glued to the pad compass.
+    /// </summary>
+    public static void ApplySkyboxRotation(Quaternion worldFromCubemap)
+    {
+        if (runtimeSkyboxMaterial == null || !runtimeSkyboxMaterial.HasProperty("_SkyRotation"))
+        {
+            return;
+        }
+
+        Quaternion q = worldFromCubemap;
+        if (q.w < 0f)
+        {
+            q = new Quaternion(-q.x, -q.y, -q.z, -q.w);
+        }
+
+        if (Quaternion.Dot(lastSkyRotation, q) < 0f)
+        {
+            q = new Quaternion(-q.x, -q.y, -q.z, -q.w);
+        }
+
+        lastSkyRotation = q;
+        runtimeSkyboxMaterial.SetVector(
+            "_SkyRotation",
+            new Vector4(q.x, q.y, q.z, q.w)
+        );
     }
 
     static float Smooth01(float t)
@@ -119,9 +150,12 @@ public static class GalaxySkyboxEnvironment
 
     static void EnsureRuntimeSkyboxMaterial(Material sourceMaterial)
     {
+        Shader galaxyShader = Shader.Find("SpaceProgram/GalaxySkybox");
+        Shader targetShader = galaxyShader != null ? galaxyShader : sourceMaterial.shader;
+
         if (
             runtimeSkyboxMaterial != null &&
-            runtimeSkyboxMaterial.shader == sourceMaterial.shader
+            runtimeSkyboxMaterial.shader == targetShader
         )
         {
             return;
@@ -136,8 +170,16 @@ public static class GalaxySkyboxEnvironment
         {
             name = sourceMaterial.name + " (Runtime)",
         };
+
+        if (galaxyShader != null)
+        {
+            runtimeSkyboxMaterial.shader = galaxyShader;
+        }
+
         runtimeSkyboxMaterial.SetFloat("_Exposure", 0f);
         runtimeSkyboxMaterial.SetColor("_Tint", new Color(0.12f, 0.12f, 0.12f, 1f));
+        lastSkyRotation = Quaternion.identity;
+        ApplySkyboxRotation(Quaternion.identity);
     }
 
     public static void ClearCache()
@@ -148,6 +190,7 @@ public static class GalaxySkyboxEnvironment
         {
             Object.Destroy(runtimeSkyboxMaterial);
             runtimeSkyboxMaterial = null;
+            lastSkyRotation = Quaternion.identity;
         }
     }
 

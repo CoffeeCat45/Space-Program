@@ -220,8 +220,14 @@ class StageData
 
     public static void ReconcileScalarsFromBlocks(StageData stage)
     {
-        if (stage?.blocks == null || stage.blocks.Count == 0)
+        if (stage?.blocks == null)
         {
+            return;
+        }
+
+        if (stage.blocks.Count == 0)
+        {
+            stage.thrust = 0.0;
             return;
         }
 
@@ -273,10 +279,7 @@ class StageData
             stage.maxFuelMass = fuelMass;
         }
 
-        if (thrust > 0.0)
-        {
-            stage.thrust = thrust;
-        }
+        stage.thrust = thrust;
 
         if (isp > 0.0)
         {

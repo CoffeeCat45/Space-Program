@@ -17,6 +17,52 @@ static class ShipStabilityAssist
         vessel.stabilityAssistTargetInitialized = false;
     }
 
+    public static bool IsAttitudeHoldMode(ShipOrientationMode mode)
+    {
+        return
+            mode == ShipOrientationMode.StabilityAssist ||
+            mode == ShipOrientationMode.DevStabilityAssist;
+    }
+
+    public static bool HasRotationInput(Vessel vessel)
+    {
+        if (vessel == null)
+        {
+            return false;
+        }
+
+        return
+            Math.Abs(vessel.controlState.pitchInput) > 1e-6f ||
+            Math.Abs(vessel.controlState.yawInput) > 1e-6f ||
+            Math.Abs(vessel.controlState.rollInput) > 1e-6f;
+    }
+
+    public static void CaptureHoldFromCurrent(Vessel vessel)
+    {
+        if (vessel == null)
+        {
+            return;
+        }
+
+        vessel.stabilityAssistTargetOrientation = vessel.orientation;
+        vessel.stabilityAssistTargetInitialized = true;
+    }
+
+    public static void FollowHoldAfterSteeringIntegrate(Vessel vessel)
+    {
+        if (vessel == null || !IsAttitudeHoldMode(vessel.controlState.orientationMode))
+        {
+            return;
+        }
+
+        if (!HasRotationInput(vessel))
+        {
+            return;
+        }
+
+        CaptureHoldFromCurrent(vessel);
+    }
+
     public static void Apply(
         Vessel vessel,
         double dt,
@@ -59,7 +105,13 @@ static class ShipStabilityAssist
         bool rollReleased =
             Math.Abs(vessel.stabilityAssistPrevRollInput) > 1e-6f && !rollActive;
 
-        if (pitchReleased || yawReleased || rollReleased)
+        if (unlimitedAuthority && hasInput)
+        {
+            // Dev hold follows the stick. Do not keep the pose from the moment
+            // the mode was enabled — a later idle snap would teleport back to it.
+            vessel.stabilityAssistTargetOrientation = vessel.orientation;
+        }
+        else if (pitchReleased || yawReleased || rollReleased)
         {
             vessel.stabilityAssistTargetOrientation = vessel.orientation;
         }
@@ -77,6 +129,21 @@ static class ShipStabilityAssist
         vessel.stabilityAssistPrevPitchInput = vessel.controlState.pitchInput;
         vessel.stabilityAssistPrevYawInput = vessel.controlState.yawInput;
         vessel.stabilityAssistPrevRollInput = vessel.controlState.rollInput;
+
+        if (unlimitedAuthority && hasInput)
+        {
+            ApplyManualAngularRates(
+                vessel,
+                manualTurnRateRadiansPerSecond,
+                pitchActive,
+                yawActive,
+                rollActive,
+                usePadAxes,
+                dt,
+                rollTurnRateMultiplier
+            );
+            return;
+        }
 
         if (unlimitedAuthority && !hasInput)
         {

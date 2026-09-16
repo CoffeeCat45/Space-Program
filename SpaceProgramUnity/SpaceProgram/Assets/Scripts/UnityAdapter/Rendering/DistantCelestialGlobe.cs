@@ -60,7 +60,7 @@ public sealed class DistantCelestialGlobe : MonoBehaviour
         bool isMoon = BodyName == CelestialTerrainRuntime.MoonBodyName;
         Texture2D colorMap = isMoon ?
             PlanetTerrainTextureResources.GetMoonColorMap() :
-            MapModeEarthResources.GetColorMap();
+            ResolveEarthColorMap();
         Color fallback = isMoon ?
             new Color(0.55f, 0.55f, 0.52f, 1f) :
             new Color(0.2f, 0.6f, 1f);
@@ -86,6 +86,7 @@ public sealed class DistantCelestialGlobe : MonoBehaviour
             FlightPlanetMapSphere.DefaultIcosphereSubdivisions,
             applyScaledSpaceLayer: false
         );
+        FlightRenderLayers.ApplyLocalPhysicsLayer(gameObject);
 
         DisableAtmosphere();
 
@@ -252,6 +253,19 @@ public sealed class DistantCelestialGlobe : MonoBehaviour
         }
 
         SyncTransparentShells(camera.transform.position);
+    }
+
+    static Texture2D ResolveEarthColorMap()
+    {
+        Texture2D colorMap = MapModeEarthResources.GetColorMap();
+
+        if (colorMap != null)
+        {
+            return colorMap;
+        }
+
+        PlanetTerrainTextureResources.EnsureLoaded();
+        return PlanetTerrainTextureResources.EarthColorMap;
     }
 
     static Material CreateGlobeMaterial(Texture2D colorMap, Color fallback, bool isMoon)

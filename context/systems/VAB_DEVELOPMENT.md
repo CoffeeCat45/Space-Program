@@ -19,12 +19,14 @@ SpaceProgramUnity/SpaceProgram/Assets/
 ├── Models/
 │   ├── Environments/                    ← 3D-меши ангаров / зданий (импорт FBX/OBJ)
 │   └── Parts/
-│       ├── Meshes/                      ← одна папка на деталь: {Category}/{partId}/*.obj + manifest
-│       └── Textures/                    ← PNG (приоритет) / DDS из ReStock
+│       ├── Meshes/                      ← ReStock: одна папка на деталь {Category}/{partId}/*.obj
+│       ├── Textures/                    ← ReStock PNG / DDS
+│       └── Custom/                      ← свои модели: {Category}/{partId}/*.obj + PNG
 ├── Materials/Parts/                     ← Lit .mat (не Meshes/**/Materials/)
+│   └── Custom/                          ← URP Lit для своих деталей
 ├── Prefabs/
 │   ├── UI/                              ← Sidebar, панель сохранения, список кораблей
-│   └── Parts/                           ← префабы pilot batch (restock-*)
+│   └── Parts/                           ← container prefabs (ReStock и свои)
 ├── Resources/RuntimePartCatalog.asset   ← печётся при Build: префабы для .exe
 └── StreamingAssets/Ships/               ← legacy `.ship` + копия JSON для .exe
 ```
@@ -109,6 +111,18 @@ C21.5 VAB editor — polish snap / симметрия / staging. Unity + Simulat
 ```
 
 ---
+
+### Свои модели (не KSP) → prefab
+
+Не путать с ReStock `.mu`. Исходники: `.obj` (Y-up, метры) + PNG цвет / металлы / roughness.
+
+1. Blender (опционально): `Tools/Blender/export_unity_custom_part.py` — OBJ под Unity и копии карт `{name}_albedo/_metallic/_roughness.png`.
+2. Unity Edit mode: **Space Program → Parts → Custom Part Importer** — указать OBJ (PNG рядом подхватываются), категорию, массу/тягу → **Собрать prefab**.
+3. Результат: `Assets/Prefabs/Parts/{Category}/{partId}/{partId}.prefab` + `.partdef.json`. Каталог VAB подхватывает сам.
+4. Ноды `Node_Top` / `Node_Bottom` после первой сборки можно подвинуть в Prefab Mode; повторный импорт их не сбрасывает (галка в окне).
+5. **Общий атлас:** одинаковые PNG (по содержимому) → один `.mat` в `Materials/Parts/Custom/`. Короткий список деталей в имени через `+`; если не влезает — имя файла атласа, детали в Asset Labels и `custom-part-materials.json`.
+
+Папка `Assets/Models/Parts/Custom/` — без KSP UV-flip (он только у ReStock `Meshes/`).
 
 **Промпт C21.4 (ReStock):**
 
