@@ -15,6 +15,7 @@ static class BuildShaderIncluder
         "Unlit/Color",
         "Particles/Standard Unlit",
         "Skybox/6 Sided",
+        "SpaceProgram/GalaxySkybox",
         "SpaceProgram/EarthPlanetLocalChunks",
         "SpaceProgram/MapModeEarthSurface",
         "SpaceProgram/SandboxEarthGlobe",

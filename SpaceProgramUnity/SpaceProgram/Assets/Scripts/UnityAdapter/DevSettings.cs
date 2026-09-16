@@ -21,6 +21,8 @@ public static class DevSettings
 
     public static bool PlanetSpinDisabled { get; private set; }
 
+    public static bool DisableCrashDamage { get; private set; }
+
     public static bool ShipTrailEnabled { get; private set; } = true;
 
     public static bool SoiSphereEnabled { get; private set; }
@@ -40,6 +42,8 @@ public static class DevSettings
         AtmosphereOpacity = Mathf.Clamp01(developer.atmosphereOpacity);
         PlanetSpinDisabled = developer.planetSpinDisabled;
         SimulationCheatFlags.PlanetSpinDisabled = PlanetSpinDisabled;
+        DisableCrashDamage = developer.disableCrashDamage;
+        SimulationCheatFlags.DisableCrashDamage = DisableCrashDamage;
         ShipTrailEnabled = developer.shipTrailEnabled;
         SoiSphereEnabled = developer.soiSphereEnabled;
         EarthGeographicMapHigh8K = developer.earthGeographicMapHigh8K;
@@ -123,6 +127,13 @@ public static class DevSettings
         Persist();
     }
 
+    public static void SetDisableCrashDamage(bool disabled)
+    {
+        DisableCrashDamage = disabled;
+        SimulationCheatFlags.DisableCrashDamage = disabled;
+        Persist();
+    }
+
     public static void SetShipTrailEnabled(bool enabled)
     {
         ShipTrailEnabled = enabled;
@@ -161,6 +172,7 @@ public static class DevSettings
         developer.atmosphereVisualsDisabled = AtmosphereVisualsDisabled;
         developer.atmosphereOpacity = AtmosphereOpacity;
         developer.planetSpinDisabled = PlanetSpinDisabled;
+        developer.disableCrashDamage = DisableCrashDamage;
         developer.shipTrailEnabled = ShipTrailEnabled;
         developer.soiSphereEnabled = SoiSphereEnabled;
         developer.earthGeographicMapHigh8K = EarthGeographicMapHigh8K;

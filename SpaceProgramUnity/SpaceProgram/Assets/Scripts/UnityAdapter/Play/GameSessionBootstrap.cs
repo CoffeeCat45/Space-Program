@@ -178,6 +178,7 @@ public class GameSessionBootstrap : MonoBehaviour
         DevSettings.Load();
         PlanetLodSettings.Load();
         FlightHudSettings.Load();
+        FlightDebugSettings.Load();
         runner = GetComponent<SimulationRunner>();
 
         if (runner == null)
@@ -193,6 +194,11 @@ public class GameSessionBootstrap : MonoBehaviour
         if (GetComponent<FlightHudSettingsUi>() == null)
         {
             gameObject.AddComponent<FlightHudSettingsUi>();
+        }
+
+        if (GetComponent<FlightDebugSettingsUi>() == null)
+        {
+            gameObject.AddComponent<FlightDebugSettingsUi>();
         }
     }
 

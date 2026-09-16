@@ -66,6 +66,8 @@ partial class Simulation : ISimulationStateView
     public bool atmosphericSasEnabled;
     public bool enableAtmosphericPreview;
     public ShipOrientationInput orientationInput;
+    public ShipHudSpeedMode speedReferenceMode = ShipHudSpeedMode.Surface;
+    public string selectedTargetName = string.Empty;
     public int ClientLocalOrientationVesselId;
     public double circularSpeedAtStart;
     public double moonCircularSpeedAtStart;
@@ -86,17 +88,10 @@ partial class Simulation : ISimulationStateView
     bool solarStepStartCaptured;
 
     const double SphereOfInfluenceExitMultiplier = 1.04;
-    /// <summary>
-    /// Drop Kepler rails this close to the Moon so patched-conics SoI uses the
-    /// same numerical boundary as a thrusting encounter.
-    /// </summary>
-    const double MoonSoiNumericalPatchMultiplier = 1.25;
-    const double SoftLandingTotalSpeed = 18.0;
+    const double SoftLandingTotalSpeed = 27.0;
     const double LiftoffThrustMargin = 1.05;
     const double MaxNumericalPhysicsStep = 1.0;
     const double RailsThrustEpsilonSquared = 1e-8;
-    const double MaxPhysicsWarpTimeScaleWhileThrusting = 4.0;
-    const double MaxAnalyticTimeScaleWhileThrusting = 1.0;
     const double MaxSimulationStepWhileThrusting = 1.0;
     const double SasOrientationKp = 8.0;
     const double SasOrientationKd = 3.0;
@@ -335,7 +330,11 @@ partial class Simulation : ISimulationStateView
 
     public bool IsThrustActive()
     {
-        if (ship == null || ship.controlState.throttle <= 0.0)
+        if (
+            ship == null ||
+            !ship.HasLiveMainEngine() ||
+            ship.controlState.throttle <= 0.0
+        )
         {
             return false;
         }
@@ -355,7 +354,11 @@ partial class Simulation : ISimulationStateView
 
     public bool IsThrustTimeWarpRestricted()
     {
-        if (ship == null || ship.controlState.throttle <= 0.0)
+        if (
+            ship == null ||
+            !ship.HasLiveMainEngine() ||
+            ship.controlState.throttle <= 0.0
+        )
         {
             return false;
         }
@@ -377,10 +380,10 @@ partial class Simulation : ISimulationStateView
 
         if (IsThrustActive())
         {
-            return MaxAnalyticTimeScaleWhileThrusting;
+            return TimeWarpLimits.AnalyticWarpWhileThrusting;
         }
 
-        return MaxPhysicsWarpTimeScaleWhileThrusting;
+        return TimeWarpLimits.PhysicsWarpMax;
     }
 
     public const string ThrustTimeWarpBlockedMessage =
@@ -449,13 +452,9 @@ partial class Simulation : ISimulationStateView
     {
         if (input.mode == ShipOrientationMode.Prograde)
         {
-            if (
-                vessel == ship &&
-                !ScenarioIsVacuumDocking() &&
-                IsShipInAtmosphere()
-            )
+            if (vessel == ship)
             {
-                return GetShipProgradeDirectionForAtmosphere();
+                return GetShipProgradeDirectionForSpeedReference();
             }
 
             SimVector3 orbitVelocity = GetVesselOrbitVelocityForOrientation(vessel);
@@ -467,13 +466,9 @@ partial class Simulation : ISimulationStateView
 
         if (input.mode == ShipOrientationMode.Retrograde)
         {
-            if (
-                vessel == ship &&
-                !ScenarioIsVacuumDocking() &&
-                IsShipInAtmosphere()
-            )
+            if (vessel == ship)
             {
-                return GetShipRetrogradeDirectionForAtmosphere();
+                return GetShipRetrogradeDirectionForSpeedReference();
             }
 
             SimVector3 orbitVelocity = GetVesselOrbitVelocityForOrientation(vessel);
@@ -739,6 +734,7 @@ partial class Simulation : ISimulationStateView
 
         ApplyVesselOrientationControl(vessel, dt);
         vessel.IntegrateOrientation(dt);
+        ShipStabilityAssist.FollowHoldAfterSteeringIntegrate(vessel);
     }
 
     public void SetPendingRcsThrust(SimVector3 localThrust)
@@ -1643,14 +1639,7 @@ partial class Simulation : ISimulationStateView
 
         if (vessel.flightStatus == FlightStatus.Landed)
         {
-            Body surfaceBody = GetBodyByName(vessel.landedOnBodyName);
-
-            if (surfaceBody != null)
-            {
-                SimVector3 surfaceNormal = GetSurfaceNormal(surfaceBody);
-                vessel.StabilizeLandedOrientation(surfaceNormal);
-                vessel.angularVelocity = SimVector3.Zero();
-            }
+            vessel.angularVelocity = SimVector3.Zero();
         }
     }
 
@@ -2117,14 +2106,9 @@ partial class Simulation : ISimulationStateView
         }
 
         EnsurePadLaunchBodyFixedDirection(primary);
-
-        SimVector3 surfaceNormal = GetBodyFixedSurfaceNormal(primary);
-        PinShipToSurface(primary, surfaceNormal);
-        SimVector3 surfaceEast = LandingConfig.GetSurfaceEastTangent(surfaceNormal);
-        vessel.orientation = SimQuaternion.FromForwardAndUp(surfaceEast, surfaceNormal);
-        vessel.SyncHeadingFromOrientation();
         vessel.velocity = GetVesselSurfaceVelocity(primary, vessel);
         vessel.angularVelocity = SimVector3.Zero();
+        PushShipOutOfSurface(primary);
     }
 
     public SimVector3 GetVesselSurfaceUp(Vessel vessel)
@@ -2151,12 +2135,27 @@ partial class Simulation : ISimulationStateView
         return GetVesselSurfaceUp(ship);
     }
 
+    /// <summary>
+    /// Pad still visible (100 m). Not physics: a wide radius made desert next to Cove
+    /// use pad-deck height.
+    /// </summary>
     public bool IsShipOnCoveLaunchPad()
     {
         return
             ScenarioUsesSurfaceLaunchPad() &&
             GetShipSurfaceDistanceFromLaunchSiteMeters() <=
                 LaunchPadConstants.LaunchSitePadVisibilityRadiusMeters;
+    }
+
+    /// <summary>
+    /// Standing on the Cove deck (physics). Visibility radius is much wider.
+    /// </summary>
+    public bool IsShipOnCovePadContact()
+    {
+        return
+            ScenarioUsesSurfaceLaunchPad() &&
+            GetShipSurfaceDistanceFromLaunchSiteMeters() <=
+                LaunchPadConstants.PadPhysicsContactRadiusMeters;
     }
 
     static List<StageData> BuildSurfaceLaunchStageList()
@@ -2611,6 +2610,8 @@ partial class Simulation : ISimulationStateView
         copy.atmosphericSasEnabled = atmosphericSasEnabled;
         copy.enableAtmosphericPreview = enableAtmosphericPreview;
         copy.orientationInput = orientationInput;
+        copy.speedReferenceMode = speedReferenceMode;
+        copy.selectedTargetName = selectedTargetName;
         copy.lastFlightEventMessage = lastFlightEventMessage;
         copy.simulationTime = simulationTime;
         copy.isOrbitPreview = true;
@@ -2731,6 +2732,7 @@ partial class Simulation : ISimulationStateView
         copy.activeStageIndex = vessel.activeStageIndex;
         copy.flightStatus = vessel.flightStatus;
         copy.landedOnBodyName = vessel.landedOnBodyName;
+        copy.landedSurfaceDirectionBodyFixed = vessel.landedSurfaceDirectionBodyFixed;
         copy.collisionRadius = vessel.collisionRadius;
         copy.lastSurfaceNormal = vessel.lastSurfaceNormal;
         copy.centerOfPressureOffset = vessel.centerOfPressureOffset;
@@ -3790,14 +3792,75 @@ partial class Simulation : ISimulationStateView
             return;
         }
 
-        double remaining = dt;
+        // Large Kepler steps (×50+ is 1–120 s) must not run SAS PID: max turn
+        // 120 °/s × 1 s overshoots a ~4 °/s orbital prograde change and spins.
+        ApplyVesselOrientationOnKeplerCoast(ship, dt);
+    }
 
-        while (remaining > 1e-12)
+    void ApplyVesselOrientationOnKeplerCoast(Vessel vessel, double dt)
+    {
+        if (vessel == null || !VesselAllowsPadFlightControls(vessel) || dt <= 0.0)
         {
-            double step = Math.Min(remaining, MaxNumericalPhysicsStep);
-            IntegrateVesselAttitudeSubstep(ship, step);
-            remaining -= step;
+            return;
         }
+
+        ShipOrientationInput input = BuildVesselOrientationInput(vessel);
+        ShipStabilityAssist.NotifyOrientationMode(vessel, input.mode);
+
+        if (
+            input.mode == ShipOrientationMode.StabilityAssist ||
+            input.mode == ShipOrientationMode.DevStabilityAssist
+        )
+        {
+            if (!vessel.stabilityAssistTargetInitialized)
+            {
+                ShipStabilityAssist.CaptureHoldFromCurrent(vessel);
+            }
+
+            if (ShipStabilityAssist.HasRotationInput(vessel))
+            {
+                double steerDt = Math.Min(dt, 1.0 / 50.0);
+                bool unlimited = input.mode == ShipOrientationMode.DevStabilityAssist;
+                ShipStabilityAssist.Apply(
+                    vessel,
+                    steerDt,
+                    ScenarioUsesSurfaceLaunchPad(),
+                    unlimited ?
+                        DefaultShipManualTurnRateRadiansPerSecond :
+                        GetManualAttitudeTurnRateRadiansPerSecond(vessel),
+                    DefaultShipAutoTurnRateRadiansPerSecond,
+                    unlimited ? DevSasOrientationKp : SasOrientationKp,
+                    unlimited ? DevSasOrientationKd : SasOrientationKd,
+                    unlimitedAuthority: unlimited,
+                    rollTurnRateMultiplier: unlimited ? DevSasRollTurnRateMultiplier : 1.0
+                );
+                vessel.IntegrateOrientation(steerDt);
+                ShipStabilityAssist.FollowHoldAfterSteeringIntegrate(vessel);
+            }
+            else
+            {
+                vessel.orientation = vessel.stabilityAssistTargetOrientation;
+                vessel.angularVelocity = SimVector3.Zero();
+            }
+
+            return;
+        }
+
+        if (input.mode == ShipOrientationMode.Manual)
+        {
+            vessel.angularVelocity = SimVector3.Zero();
+            return;
+        }
+
+        SimVector3 targetDirection = GetVesselTargetDirection(vessel, input);
+        if (targetDirection.LengthSquared() <= 1e-12)
+        {
+            vessel.angularVelocity = SimVector3.Zero();
+            return;
+        }
+
+        double maxRadians = DefaultShipAutoTurnRateRadiansPerSecond * dt;
+        vessel.RotateNoseTowardWorld(targetDirection, maxRadians);
     }
 
     void UpdateSolarSystem(double dt)
@@ -4013,11 +4076,24 @@ partial class Simulation : ISimulationStateView
             child.position.Subtract(parentPositionAtStepStart);
         SimVector3 relativeVelocity =
             child.velocity.Subtract(parentVelocityAtStepStart);
-        SimVector3 childPositionAtStepStart =
-            parentPositionAtStepStart.Add(relativePosition);
+        SimVector3 gravityRelativePosition = relativePosition;
+        double gravityFloorRadius = child == ship && parent.radius > 0.0 ?
+            parent.radius * 0.5 :
+            0.0;
+
+        if (gravityFloorRadius > 0.0)
+        {
+            gravityRelativePosition = ClampRelativeOffsetForGravity(
+                relativePosition,
+                gravityFloorRadius
+            );
+        }
+
+        SimVector3 gravitySampleAtStepStart =
+            parentPositionAtStepStart.Add(gravityRelativePosition);
 
         SimVector3 oldRelativeAcceleration = gravityModel.CalculateAcceleration(
-            childPositionAtStepStart,
+            gravitySampleAtStepStart,
             parentPositionAtStepStart,
             parent.mu
         );
@@ -4026,11 +4102,14 @@ partial class Simulation : ISimulationStateView
             .Add(relativeVelocity.Multiply(dt))
             .Add(oldRelativeAcceleration.Multiply(0.5 * dt * dt));
 
-        SimVector3 childPositionBeforeVelocityStep =
-            parent.position.Add(relativePosition);
+        SimVector3 gravitySampleBeforeVelocityStep = parent.position.Add(
+            gravityFloorRadius > 0.0 ?
+                ClampRelativeOffsetForGravity(relativePosition, gravityFloorRadius) :
+                relativePosition
+        );
 
         SimVector3 newRelativeAcceleration = gravityModel.CalculateAcceleration(
-            childPositionBeforeVelocityStep,
+            gravitySampleBeforeVelocityStep,
             parent.position,
             parent.mu
         );
@@ -4463,12 +4542,24 @@ partial class Simulation : ISimulationStateView
         if (
             ScenarioHasMoon() &&
             moon != null &&
-            primary != moon &&
             moonSphereOfInfluenceRadius > 0.0
         )
         {
-            double distanceToMoon = moon.position.Subtract(vessel.position).Length();
-            if (distanceToMoon <= moonSphereOfInfluenceRadius * MoonSoiNumericalPatchMultiplier)
+            SimVector3 shipFromMoon = vessel.position.Subtract(moon.position);
+            double distanceToMoon = shipFromMoon.Length();
+            SimVector3 relativeVelocity = vessel.velocity.Subtract(moon.velocity);
+            double recedingSpeed = distanceToMoon > 1e-9 ?
+                SimVector3.Dot(relativeVelocity, shipFromMoon) / distanceToMoon :
+                0.0;
+
+            if (
+                SoiGeometry.HoldKeplerRailsForMoonApproach(
+                    primary == moon,
+                    distanceToMoon,
+                    moonSphereOfInfluenceRadius,
+                    recedingSpeed
+                )
+            )
             {
                 return false;
             }
@@ -5005,17 +5096,34 @@ partial class Simulation : ISimulationStateView
         Body previousPrimary
     )
     {
-        if (previousPrimary == null)
+        if (previousPrimary == null || previousPrimary == ship)
         {
-            previousPrimary = planet;
+            previousPrimary = SimulationScenarios.IsMoonSurfacePad(scenario) && moon != null ?
+                moon :
+                planet;
         }
 
         if (ScenarioHasMoon() && moon != null)
         {
+            bool moonPad = SimulationScenarios.IsMoonSurfacePad(scenario);
             double distanceToMoon =
                 moon.position.Subtract(shipPosition).Length();
 
-            if (previousPrimary == moon)
+            if (!SoiGeometry.IsFiniteNumber(distanceToMoon))
+            {
+                if (SoiGeometry.HoldMoonPrimaryOnInvalidDistance(
+                    previousPrimary == moon,
+                    moonPad
+                ))
+                {
+                    return moon;
+                }
+            }
+            else if (SoiGeometry.IsInsideMoonNearSurfaceLock(distanceToMoon, moon.radius))
+            {
+                return moon;
+            }
+            else if (previousPrimary == moon)
             {
                 if (distanceToMoon <= moonSphereOfInfluenceRadius)
                 {
@@ -5074,8 +5182,86 @@ partial class Simulation : ISimulationStateView
         return ShouldUseKeplerRails(ship);
     }
 
+    void RecoverMoonPadIfTeleportedIntoSun()
+    {
+        if (
+            ship == null ||
+            moon == null ||
+            sun == null ||
+            !SimulationScenarios.IsMoonSurfacePad(scenario)
+        )
+        {
+            return;
+        }
+
+        if (
+            !SoiGeometry.IsFiniteNumber(moon.position.x) ||
+            !SoiGeometry.IsFiniteNumber(moon.position.y) ||
+            !SoiGeometry.IsFiniteNumber(moon.position.z)
+        )
+        {
+            return;
+        }
+
+        bool shipStateInvalid =
+            !SoiGeometry.IsFiniteNumber(ship.position.x) ||
+            !SoiGeometry.IsFiniteNumber(ship.position.y) ||
+            !SoiGeometry.IsFiniteNumber(ship.position.z) ||
+            !SoiGeometry.IsFiniteNumber(ship.orientation.w) ||
+            !SoiGeometry.IsFiniteNumber(ship.orientation.x) ||
+            !SoiGeometry.IsFiniteNumber(ship.orientation.y) ||
+            !SoiGeometry.IsFiniteNumber(ship.orientation.z);
+
+        double distanceToSun = shipStateInvalid ?
+            0.0 :
+            ship.GetCenterOfMassWorld().Subtract(sun.position).Length();
+        double distanceToMoon = shipStateInvalid ?
+            double.PositiveInfinity :
+            GetShipDistanceToMoon();
+        bool falseSun =
+            SoiGeometry.IsFalseSunPrimaryInsidePhotosphere(
+                distanceToSun,
+                sun.radius,
+                distanceToMoon,
+                moon.radius
+            );
+
+        if (!shipStateInvalid && !falseSun)
+        {
+            return;
+        }
+
+        SimVector3 padNormal = moon.RotateBodyFixedToWorld(
+            LandingConfig.GetSurfaceLaunchPadNormal()
+        );
+        if (
+            !SoiGeometry.IsFiniteNumber(padNormal.x) ||
+            padNormal.LengthSquared() <= 1e-12
+        )
+        {
+            padNormal = LandingConfig.GetSurfaceLaunchPadNormal();
+        }
+        else
+        {
+            padNormal = padNormal.Normalize();
+        }
+
+        ship.orientation = SimQuaternion.FromForwardAndUp(
+            LandingConfig.GetSurfaceEastTangent(padNormal),
+            padNormal
+        );
+        ship.angularVelocity = SimVector3.Zero();
+        PinShipToSurface(moon, padNormal);
+        ship.velocity = GetLandedSurfaceVelocity(moon);
+        lastActivePrimaryForHysteresis = moon.name;
+        activePrimaryBodyName = moon.name;
+        lastFlightEventMessage = "Recovered lunar pad after invalid Sun primary";
+    }
+
     void FinalizeUpdateStep()
     {
+        RecoverMoonPadIfTeleportedIntoSun();
+
         if (ship.flightStatus != FlightStatus.Landed)
         {
             EnforceSphereCollisionWithPrimary();
@@ -5162,8 +5348,7 @@ partial class Simulation : ISimulationStateView
 
         double altitude = GetShipAltitudeAboveBody(atmosphereBody);
         AtmosphereProfile profile = atmosphereBody.atmosphereProfile;
-        SimVector3 relativeVelocity =
-            ship.velocity.Subtract(atmosphereBody.velocity);
+        SimVector3 relativeVelocity = GetGroundRelativeVelocity(atmosphereBody, ship);
         AerodynamicProperties aerodynamics = AerodynamicProperties.FromStageData(
             activeStage,
             ship.centerOfPressureOffset
@@ -5354,8 +5539,6 @@ partial class Simulation : ISimulationStateView
     void HandleLandedStep(double dt)
     {
         ExitKeplerRails();
-        AdvanceUniverseBodiesWithoutShip(dt);
-
         Body primary = GetActivePrimaryBody();
 
         if (primary == null || primary.radius <= 0.0)
@@ -5363,18 +5546,15 @@ partial class Simulation : ISimulationStateView
             return;
         }
 
+        LandedBodyFixedPose landedPose = CaptureLandedBodyFixedPose(primary);
+        AdvanceUniverseBodiesWithoutShip(dt);
+
         if (sun == null)
         {
             primary.AdvanceSpin(dt);
         }
 
-        if (ScenarioUsesSurfaceLaunchPad())
-        {
-            SyncLandedVesselToRotatingSurface(primary, ship);
-            return;
-        }
-
-        CoRotateLandedShipWithPlanet(primary, dt);
+        RestoreLandedBodyFixedPose(primary, landedPose);
 
         SimVector3 surfaceNormal = GetLandedSurfaceDirection(primary);
         ship.angularVelocity = SimVector3.Zero();
@@ -5424,7 +5604,7 @@ partial class Simulation : ISimulationStateView
             return;
         }
 
-        PinShipToSurface(primary, surfaceNormal);
+        PushShipOutOfSurface(primary);
         ship.velocity = GetLandedSurfaceVelocity(primary);
         ship.angularVelocity = SimVector3.Zero();
     }
@@ -5437,6 +5617,30 @@ partial class Simulation : ISimulationStateView
         }
 
         return primary.GetAbsoluteSurfaceVelocityAt(vessel.GetCenterOfMassWorld());
+    }
+
+    SimVector3 GetGroundRelativeVelocity(Body primary, Vessel vessel)
+    {
+        if (primary == null || vessel == null)
+        {
+            return SimVector3.Zero();
+        }
+
+        return vessel.velocity.Subtract(GetVesselSurfaceVelocity(primary, vessel));
+    }
+
+    void SetVelocityFromGroundRelative(
+        Body primary,
+        Vessel vessel,
+        SimVector3 groundRelative
+    )
+    {
+        if (primary == null || vessel == null)
+        {
+            return;
+        }
+
+        vessel.velocity = GetVesselSurfaceVelocity(primary, vessel).Add(groundRelative);
     }
 
     SimVector3 GetLandedSurfaceVelocity(Body primary)
@@ -5612,7 +5816,7 @@ partial class Simulation : ISimulationStateView
     {
         Body surfaceBody = GetActivePrimaryBody();
 
-        if (surfaceBody == null || surfaceBody.radius <= 0.0)
+        if (surfaceBody == null || surfaceBody.radius <= 0.0 || surfaceBody == sun)
         {
             return;
         }
@@ -5624,15 +5828,17 @@ partial class Simulation : ISimulationStateView
             return;
         }
 
-        SimVector3 surfaceNormal = GetSurfaceNormal(surfaceBody);
-        SimVector3 relativeVelocity =
-            ship.velocity.Subtract(surfaceBody.velocity);
+        SimVector3 surfaceNormal = GetSurfaceContactNormal(surfaceBody);
+        SimVector3 relativeVelocity = GetGroundRelativeVelocity(surfaceBody, ship);
         double verticalSpeed = SimVector3.Dot(relativeVelocity, surfaceNormal);
         double localGravity = GetBodySurfaceGravity(surfaceBody);
         double thrustForce =
             ship.GetActiveEngineThrustNewtons() * ship.controlState.throttle;
         double weight = ship.GetMass() * localGravity;
+        bool deeplyEmbedded =
+            altitude < -Math.Max(50.0, surfaceBody.radius * 0.01);
         bool climbingUnderThrust =
+            !deeplyEmbedded &&
             ship.flightStatus == FlightStatus.Flying &&
             verticalSpeed > 0.0 &&
             ship.controlState.throttle > 0.01f &&
@@ -5647,14 +5853,14 @@ partial class Simulation : ISimulationStateView
         {
             ship.ProcessBlockSurfaceImpacts(
                 surfaceNormal,
-                surfaceBody.velocity,
+                GetVesselSurfaceVelocity(surfaceBody, ship),
                 localGravity
             );
         }
 
-        PinShipToSurface(surfaceBody, surfaceNormal);
+        PushShipOutOfSurface(surfaceBody);
 
-        relativeVelocity = ship.velocity.Subtract(surfaceBody.velocity);
+        relativeVelocity = GetGroundRelativeVelocity(surfaceBody, ship);
         verticalSpeed = SimVector3.Dot(relativeVelocity, surfaceNormal);
 
         if (verticalSpeed < 0.0)
@@ -5697,6 +5903,7 @@ partial class Simulation : ISimulationStateView
                     verticalSpeed = 0.0;
                     ship.flightStatus = FlightStatus.Landed;
                     ship.landedOnBodyName = surfaceBody.name;
+                    CaptureLandedSurfaceDirectionBodyFixed(surfaceBody, surfaceNormal);
                 }
                 else
                 {
@@ -5710,14 +5917,14 @@ partial class Simulation : ISimulationStateView
         relativeVelocity = tangentialVelocity.Add(
             surfaceNormal.Multiply(verticalSpeed)
         );
-        ship.velocity = surfaceBody.velocity.Add(relativeVelocity);
+        SetVelocityFromGroundRelative(surfaceBody, ship, relativeVelocity);
     }
 
     void TryResolveSurfaceContact()
     {
         Body surfaceBody = GetActivePrimaryBody();
 
-        if (surfaceBody == null || surfaceBody.radius <= 0.0)
+        if (surfaceBody == null || surfaceBody.radius <= 0.0 || surfaceBody == sun)
         {
             return;
         }
@@ -5729,11 +5936,10 @@ partial class Simulation : ISimulationStateView
             return;
         }
 
-        SimVector3 surfaceNormal = GetSurfaceNormal(surfaceBody);
-        PinShipToSurface(surfaceBody, surfaceNormal);
+        SimVector3 surfaceNormal = GetSurfaceContactNormal(surfaceBody);
+        PushShipOutOfSurface(surfaceBody);
 
-        SimVector3 relativeVelocity =
-            ship.velocity.Subtract(surfaceBody.velocity);
+        SimVector3 relativeVelocity = GetGroundRelativeVelocity(surfaceBody, ship);
         double verticalSpeed = SimVector3.Dot(relativeVelocity, surfaceNormal);
         SimVector3 surfaceVelocity = relativeVelocity.Subtract(
             surfaceNormal.Multiply(verticalSpeed)
@@ -5742,15 +5948,18 @@ partial class Simulation : ISimulationStateView
         double totalSpeed = relativeVelocity.Length();
 
         if (
-            ship.CheckCrash(
-                verticalSpeed,
-                surfaceSpeed,
-                LandingConfig.CrashSpeedThreshold
-            ) ||
-            totalSpeed > SoftLandingTotalSpeed
+            !SimulationCheatFlags.DisableCrashDamage &&
+            (
+                ship.CheckCrash(
+                    verticalSpeed,
+                    surfaceSpeed,
+                    LandingConfig.CrashSpeedThreshold
+                ) ||
+                totalSpeed > SoftLandingTotalSpeed
+            )
         )
         {
-            ship.velocity = surfaceBody.velocity;
+            ship.velocity = GetLandedSurfaceVelocity(surfaceBody);
             ship.thrust = SimVector3.Zero();
             lastFlightEventMessage = "Crashed on " + surfaceBody.name;
             return;
@@ -5772,7 +5981,8 @@ partial class Simulation : ISimulationStateView
             return false;
         }
 
-        if (!PlanetElevationCatalog.TryGetElevationAtDirection(
+        if (!PlanetSurfaceContact.TrySampleMapAt(
+            surfaceBody,
             surfaceNormal,
             out double gebcoMeters
         ))
@@ -5785,12 +5995,12 @@ partial class Simulation : ISimulationStateView
 
     void PinShipToSurface(Body surfaceBody)
     {
-        PinShipToSurface(surfaceBody, GetSurfaceNormal(surfaceBody));
+        PinShipToSurface(surfaceBody, GetSurfaceContactNormal(surfaceBody));
     }
 
-    void PinShipToSurface(Body surfaceBody, SimVector3 surfaceNormal)
+    internal void PinShipToSurface(Body surfaceBody, SimVector3 surfaceNormal)
     {
-        bool usePadDeckHeight = IsShipOnCoveLaunchPad();
+        bool usePadDeckHeight = IsShipOnCovePadContact();
         SimVector3 contactWorld;
         SimVector3 comWorld;
 
@@ -5812,9 +6022,24 @@ partial class Simulation : ISimulationStateView
             double bottomExtent = LaunchPadConstants.GetEffectiveBottomExtentMeters(
                 ship.GetBottomExtentAlongWorldDirection(surfaceNormal)
             );
-            double comDistance = usePadDeckHeight ?
-                LaunchPadConstants.GetPadRestComDistance(bottomExtent) :
-                surfaceBody.radius + bottomExtent + LandingConfig.SurfacePad;
+            double comDistance;
+            if (usePadDeckHeight)
+            {
+                comDistance = LaunchPadConstants.GetPadRestComDistance(bottomExtent);
+            }
+            else
+            {
+                double terrainHeight = PlanetSurfaceContact.GetHeightAboveSphereMeters(
+                    surfaceBody,
+                    surfaceNormal
+                );
+                comDistance = surfaceBody.radius + terrainHeight + bottomExtent;
+                if (!PlanetSurfaceContact.TrySampleMapAt(surfaceBody, surfaceNormal, out _))
+                {
+                    comDistance += LandingConfig.SurfacePad;
+                }
+            }
+
             comWorld = surfaceBody.position.Add(surfaceNormal.Multiply(comDistance));
         }
 
@@ -5882,6 +6107,46 @@ partial class Simulation : ISimulationStateView
         return ship.lastSurfaceNormal;
     }
 
+    /// <summary>
+    /// Contact normal that co-rotates with the pad. Radial-from-COM would pin to a
+    /// new inertial longitude every tick (east teleport on Earth).
+    /// </summary>
+    internal SimVector3 GetSurfaceContactNormal(Body surfaceBody)
+    {
+        if (surfaceBody == null)
+        {
+            return SimVector3.UnitY();
+        }
+
+        if (IsShipOnCovePadContact())
+        {
+            SimVector3 padWorld = surfaceBody.RotateBodyFixedToWorld(
+                LandingConfig.GetSurfaceLaunchPadNormal()
+            );
+            if (padWorld.LengthSquared() > 1e-12)
+            {
+                return padWorld.Normalize();
+            }
+        }
+
+        if (
+            ship != null &&
+            ship.flightStatus != FlightStatus.Flying &&
+            ship.landedSurfaceDirectionBodyFixed.LengthSquared() > 1e-12
+        )
+        {
+            SimVector3 landedWorld = surfaceBody.RotateBodyFixedToWorld(
+                ship.landedSurfaceDirectionBodyFixed
+            );
+            if (landedWorld.LengthSquared() > 1e-12)
+            {
+                return landedWorld.Normalize();
+            }
+        }
+
+        return GetSurfaceNormal(surfaceBody);
+    }
+
     double GetShipAltitudeAboveBody(Body body)
     {
         return GetShipAltitudeAboveBody(body, ship.GetCenterOfMassWorld());
@@ -5908,10 +6173,15 @@ partial class Simulation : ISimulationStateView
             padBody != null &&
             body == padBody &&
             ScenarioUsesSurfaceLaunchPad() &&
-            IsShipOnCoveLaunchPad()
+            IsShipOnCovePadContact()
         )
         {
-            terrainHeight = LaunchPadConstants.GetLaunchSitePadBaseHeightAboveSphereMeters();
+            terrainHeight =
+                LaunchPadConstants.GetLaunchSiteVesselBottomHeightAboveSphereMeters();
+        }
+        else
+        {
+            terrainHeight = PlanetSurfaceContact.GetHeightAboveSphereMeters(body, outward);
         }
 
         double altitude = distanceToCom - body.radius - terrainHeight - bottomExtent;
@@ -6360,7 +6630,7 @@ partial class Simulation : ISimulationStateView
             }
 
             SimVector3 localGravityAcceleration = gravityModel.CalculateAcceleration(
-                ship.position,
+                GetGravitySamplePosition(ship.position, activePrimaryBody),
                 activePrimaryBody.position,
                 activePrimaryBody.mu
             );
@@ -6387,6 +6657,59 @@ partial class Simulation : ISimulationStateView
         }
 
         return SimVector3.Zero();
+    }
+
+    /// <summary>
+    /// Inverse-square at r→0 is a kraken. Sample gravity no closer than half the
+    /// primary radius so a false Sun primary cannot eject a lunar hop.
+    /// </summary>
+    static SimVector3 GetGravitySamplePosition(SimVector3 objectPosition, Body source)
+    {
+        if (source == null)
+        {
+            return objectPosition;
+        }
+
+        SimVector3 offset = objectPosition.Subtract(source.position);
+        double distance = offset.Length();
+        double minDistance = Math.Max(1.0, source.radius * 0.5);
+
+        if (distance >= minDistance)
+        {
+            return objectPosition;
+        }
+
+        if (distance <= 1e-12)
+        {
+            return source.position.Add(new SimVector3(minDistance, 0.0, 0.0));
+        }
+
+        return source.position.Add(offset.Multiply(minDistance / distance));
+    }
+
+    static SimVector3 ClampRelativeOffsetForGravity(
+        SimVector3 relativePosition,
+        double minDistance
+    )
+    {
+        if (minDistance <= 0.0)
+        {
+            return relativePosition;
+        }
+
+        double distance = relativePosition.Length();
+
+        if (distance >= minDistance)
+        {
+            return relativePosition;
+        }
+
+        if (distance <= 1e-12)
+        {
+            return new SimVector3(minDistance, 0.0, 0.0);
+        }
+
+        return relativePosition.Multiply(minDistance / distance);
     }
 
     SimVector3 GetBodyAcceleration(Body body)
@@ -6471,18 +6794,46 @@ partial class Simulation : ISimulationStateView
 
         Body previousPrimary = GetBodyByName(lastActivePrimaryForHysteresis);
 
-        if (previousPrimary == null)
+        if (previousPrimary == null || previousPrimary == ship)
         {
-            previousPrimary = planet;
+            previousPrimary = SimulationScenarios.IsMoonSurfacePad(scenario) && moon != null ?
+                moon :
+                planet;
         }
 
         if (ScenarioHasMoon() && moon != null)
         {
+            bool moonPad = SimulationScenarios.IsMoonSurfacePad(scenario);
+            bool previousWasMoon = previousPrimary == moon;
+            bool landedOnMoon =
+                ship != null &&
+                ship.flightStatus == FlightStatus.Landed &&
+                (
+                    moonPad ||
+                    ship.landedOnBodyName == moon.name
+                );
+
+            if (landedOnMoon)
+            {
+                return moon;
+            }
+
             double distanceToMoon = GetShipDistanceToMoon();
             double moonExitRadius =
                 moonSphereOfInfluenceRadius * SphereOfInfluenceExitMultiplier;
 
-            if (previousPrimary == moon)
+            if (!SoiGeometry.IsFiniteNumber(distanceToMoon))
+            {
+                if (SoiGeometry.HoldMoonPrimaryOnInvalidDistance(previousWasMoon, moonPad))
+                {
+                    return moon;
+                }
+            }
+            else if (SoiGeometry.IsInsideMoonNearSurfaceLock(distanceToMoon, moon.radius))
+            {
+                return moon;
+            }
+            else if (previousWasMoon)
             {
                 if (distanceToMoon <= moonExitRadius)
                 {
@@ -6613,53 +6964,108 @@ partial class Simulation : ISimulationStateView
         return ship.velocity.Length();
     }
 
-    public enum ShipHudSpeedMode
-    {
-        Surface,
-        Orbit,
-    }
-
     public ShipHudSpeedMode GetShipHudSpeedMode()
     {
-        if (
-            GetShipAltitudeAboveActivePrimary() <
-            CelestialBody.Earth.HudOrbitSpeedModeAltitude
-        )
-        {
-            return ShipHudSpeedMode.Surface;
-        }
+        return speedReferenceMode;
+    }
 
-        return ShipHudSpeedMode.Orbit;
+    public void CycleShipHudSpeedMode()
+    {
+        speedReferenceMode = ShipSpeedReference.Cycle(speedReferenceMode);
+    }
+
+    public void SetShipHudSpeedMode(ShipHudSpeedMode mode)
+    {
+        speedReferenceMode = mode;
     }
 
     public string GetShipHudSpeedModeLabel()
     {
-        return GetShipHudSpeedMode() == ShipHudSpeedMode.Surface ?
-            "Surface" :
-            "Orbital speed";
+        return ShipSpeedReference.GetModeLabel(GetShipHudSpeedMode());
     }
 
     public double GetShipHudSpeed()
     {
+        return GetShipSpeedReferenceVelocity().Length();
+    }
+
+    public SimVector3 GetShipSpeedReferenceVelocity()
+    {
+        if (ship == null)
+        {
+            return SimVector3.Zero();
+        }
+
+        SimVector3 orbitRelative = GetVesselOrbitVelocityForOrientation(ship);
         Body primary = GetActivePrimaryBody();
+        SimVector3 surfaceRelative = orbitRelative;
 
-        if (primary == null)
+        if (primary != null)
         {
-            return GetShipSpeed();
-        }
-
-        SimVector3 relativeVelocity =
-            ship.velocity.Subtract(primary.velocity);
-
-        if (GetShipHudSpeedMode() == ShipHudSpeedMode.Surface)
-        {
-            SimVector3 surfaceVelocity = primary.GetSurfaceLinearVelocity(
-                ship.GetCenterOfMassWorld()
+            surfaceRelative = ship.velocity.Subtract(
+                primary.GetAbsoluteSurfaceVelocityAt(ship.GetCenterOfMassWorld())
             );
-            return relativeVelocity.Subtract(surfaceVelocity).Length();
         }
 
-        return relativeVelocity.Length();
+        bool hasTarget = TryGetShipTargetRelativeVelocity(out SimVector3 targetRelative);
+        return ShipSpeedReference.ResolveRelativeVelocity(
+            GetShipHudSpeedMode(),
+            orbitRelative,
+            surfaceRelative,
+            targetRelative,
+            hasTarget
+        );
+    }
+
+    public bool TryGetShipTargetRelativeVelocity(out SimVector3 relativeVelocity)
+    {
+        relativeVelocity = SimVector3.Zero();
+
+        if (ship == null)
+        {
+            return false;
+        }
+
+        if (targetVessel != null)
+        {
+            relativeVelocity = ship.velocity.Subtract(targetVessel.velocity);
+            return true;
+        }
+
+        if (string.IsNullOrEmpty(selectedTargetName))
+        {
+            return false;
+        }
+
+        if (bodies != null)
+        {
+            for (int i = 0; i < bodies.Length; i++)
+            {
+                Body body = bodies[i];
+
+                if (body != null && body.name == selectedTargetName)
+                {
+                    relativeVelocity = ship.velocity.Subtract(body.velocity);
+                    return true;
+                }
+            }
+        }
+
+        if (dockableVessels != null)
+        {
+            for (int i = 0; i < dockableVessels.Count; i++)
+            {
+                Vessel dockable = dockableVessels[i];
+
+                if (dockable != null && dockable.name == selectedTargetName)
+                {
+                    relativeVelocity = ship.velocity.Subtract(dockable.velocity);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // GetShipAcceleration = получить текущее полное ускорение корабля.
@@ -6711,39 +7117,21 @@ partial class Simulation : ISimulationStateView
 
     public double GetRecommendedMaxTimeScale()
     {
-        double maxScale = double.PositiveInfinity;
+        bool landedOrCrashed =
+            ship != null &&
+            (
+                ship.flightStatus == FlightStatus.Landed ||
+                ship.flightStatus == FlightStatus.Crashed
+            );
 
-        if (IsThrustTimeWarpRestricted())
-        {
-            maxScale = GetMaxAllowedTimeScaleWhileThrusting();
-        }
-        else if (ship.isOnKeplerRails)
-        {
-            return double.PositiveInfinity;
-        }
-
-        if (!IsShipInAtmosphere())
-        {
-            return maxScale;
-        }
-
-        double atmosphereMaxScale = double.PositiveInfinity;
-        double depth = GetShipAtmosphereDepthFraction();
-
-        if (depth >= 0.5)
-        {
-            atmosphereMaxScale = 1.0;
-        }
-        else if (depth >= 0.1)
-        {
-            atmosphereMaxScale = 10.0;
-        }
-        else
-        {
-            atmosphereMaxScale = 50.0;
-        }
-
-        return Math.Min(maxScale, atmosphereMaxScale);
+        return TimeWarpLimits.GetMaxTimeScale(
+            IsThrustTimeWarpRestricted(),
+            IsThrustActive(),
+            ship != null && ship.isOnKeplerRails,
+            landedOrCrashed,
+            IsShipInAtmosphere(),
+            GetShipAtmosphereDepthFraction()
+        );
     }
 
     public double GetShipAtmosphericDensity()
@@ -7156,27 +7544,28 @@ partial class Simulation : ISimulationStateView
             SimVector3.Zero();
     }
 
+    public SimVector3 GetShipProgradeDirectionForSpeedReference()
+    {
+        SimVector3 relativeVelocity = GetShipSpeedReferenceVelocity();
+
+        return relativeVelocity.LengthSquared() > 1e-12 ?
+            relativeVelocity.Normalize() :
+            SimVector3.Zero();
+    }
+
+    public SimVector3 GetShipRetrogradeDirectionForSpeedReference()
+    {
+        return GetShipProgradeDirectionForSpeedReference().Multiply(-1);
+    }
+
     public SimVector3 GetShipProgradeDirectionForAtmosphere()
     {
-        Body atmosphereBody = GetAtmosphereBody();
-
-        if (atmosphereBody != null)
-        {
-            SimVector3 relativeVelocity =
-                ship.velocity.Subtract(atmosphereBody.velocity);
-
-            if (relativeVelocity.LengthSquared() > 1e-12)
-            {
-                return relativeVelocity.Normalize();
-            }
-        }
-
-        return GetShipProgradeDirectionRelativeToActivePrimary();
+        return GetShipProgradeDirectionForSpeedReference();
     }
 
     public SimVector3 GetShipRetrogradeDirectionForAtmosphere()
     {
-        return GetShipProgradeDirectionForAtmosphere().Multiply(-1);
+        return GetShipRetrogradeDirectionForSpeedReference();
     }
 
     // GetShipRetrogradeDirectionRelativeToActivePrimary = получить направление против скорости относительно текущего главного тела.

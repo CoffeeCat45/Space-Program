@@ -106,6 +106,87 @@ public static class SoiGeometry
         entryFraction = Math.Max(entry, minFraction);
         return true;
     }
+
+    /// <summary>
+    /// Kepler rails off while approaching the Moon inside 1.25×SoI (so a long
+    /// Earth-coast step cannot chord through the bubble). After Moon→Earth exit,
+    /// receding ships may use Earth rails again — otherwise warp stays numerical
+    /// and ×50–×1000 barely advances.
+    /// </summary>
+    public const double MoonNumericalPatchSoiMultiplier = 1.25;
+
+    public static bool HoldKeplerRailsForMoonApproach(
+        bool primaryIsMoon,
+        double distanceToMoon,
+        double moonSphereOfInfluenceRadius,
+        double recedingSpeedFromMoon
+    )
+    {
+        if (primaryIsMoon || moonSphereOfInfluenceRadius <= 0.0)
+        {
+            return false;
+        }
+
+        double patchRadius = moonSphereOfInfluenceRadius * MoonNumericalPatchSoiMultiplier;
+        if (distanceToMoon > patchRadius)
+        {
+            return false;
+        }
+
+        return recedingSpeedFromMoon <= 0.0;
+    }
+
+    public static bool IsFiniteNumber(double value)
+    {
+        return !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    /// <summary>
+    /// A hop a few tens of km above the Moon must stay lunar. Invalid distance
+    /// must not fall through to the Sun (photosphere ejects the ship; Unity Moon
+    /// transform becomes NaN).
+    /// </summary>
+    public static bool IsInsideMoonNearSurfaceLock(double distanceToMoon, double moonRadius)
+    {
+        return
+            IsFiniteNumber(distanceToMoon) &&
+            moonRadius > 0.0 &&
+            distanceToMoon <= moonRadius * 2.0;
+    }
+
+    public static bool HoldMoonPrimaryOnInvalidDistance(
+        bool previousPrimaryIsMoon,
+        bool moonSurfacePadScenario
+    )
+    {
+        return previousPrimaryIsMoon || moonSurfacePadScenario;
+    }
+
+    /// <summary>
+    /// False Sun primary while still on/near the Moon pins the ship into the
+    /// photosphere (HUD: Body Sun, altitude 0, Moon localPosition NaN).
+    /// </summary>
+    public static bool IsFalseSunPrimaryInsidePhotosphere(
+        double distanceToSun,
+        double sunRadius,
+        double distanceToMoon,
+        double moonRadius
+    )
+    {
+        if (sunRadius <= 0.0 || moonRadius <= 0.0)
+        {
+            return false;
+        }
+
+        if (!IsFiniteNumber(distanceToSun) || !IsFiniteNumber(distanceToMoon))
+        {
+            return true;
+        }
+
+        return
+            distanceToSun < sunRadius * 2.0 &&
+            distanceToMoon > moonRadius * 2.0;
+    }
 }
 
 static class SoiTransition

@@ -27,6 +27,10 @@ public static class PlanetFlightChunkMeshCache
     static readonly Dictionary<ChunkMeshKey, LinkedListNode<ChunkMeshKey>> LruNodes =
         new Dictionary<ChunkMeshKey, LinkedListNode<ChunkMeshKey>>();
 
+    static readonly Dictionary<int, Vector3[]> SurfaceVerticesByMeshId =
+        new Dictionary<int, Vector3[]>(DefaultMaxCacheEntries);
+    static List<Vector3> radialNormalsScratch;
+
     static double lastPurgeUtcSeconds;
     static int maxCacheEntries = DefaultMaxCacheEntries;
     static double entryTtlSeconds = DefaultEntryTtlSeconds;
@@ -37,6 +41,7 @@ public static class PlanetFlightChunkMeshCache
         Cache.Clear();
         LruOrder.Clear();
         LruNodes.Clear();
+        SurfaceVerticesByMeshId.Clear();
         lastPurgeUtcSeconds = 0.0;
     }
 
@@ -252,6 +257,7 @@ public static class PlanetFlightChunkMeshCache
         Cache.Clear();
         LruOrder.Clear();
         LruNodes.Clear();
+        SurfaceVerticesByMeshId.Clear();
         lastPurgeUtcSeconds = 0.0;
     }
 
@@ -339,6 +345,7 @@ public static class PlanetFlightChunkMeshCache
         };
         Cache[cacheKey] = entry;
         Touch(cacheKey, entry);
+        RememberSurfaceVertices(mesh, data.Vertices);
         return mesh;
     }
 
@@ -382,6 +389,7 @@ public static class PlanetFlightChunkMeshCache
 
         if (entry.Mesh != null)
         {
+            ForgetSurfaceVertices(entry.Mesh);
             PlanetMeshPool.Release(entry.Mesh);
         }
     }
@@ -389,6 +397,53 @@ public static class PlanetFlightChunkMeshCache
     static double GetUtcNowSeconds()
     {
         return DateTime.UtcNow.Subtract(DateTime.UnixEpoch).TotalSeconds;
+    }
+
+    /// <summary>
+    /// Cached <see cref="Mesh.vertices"/> copy. Unity's getter allocates every call.
+    /// </summary>
+    public static Vector3[] GetSurfaceVertices(Mesh mesh)
+    {
+        if (mesh == null)
+        {
+            return null;
+        }
+
+        int meshId = mesh.GetInstanceID();
+        if (SurfaceVerticesByMeshId.TryGetValue(meshId, out Vector3[] cached) &&
+            cached != null &&
+            cached.Length == mesh.vertexCount)
+        {
+            return cached;
+        }
+
+        Vector3[] vertices = mesh.vertices;
+        if (vertices != null)
+        {
+            SurfaceVerticesByMeshId[meshId] = vertices;
+        }
+
+        return vertices;
+    }
+
+    static void RememberSurfaceVertices(Mesh mesh, Vector3[] vertices)
+    {
+        if (mesh == null || vertices == null)
+        {
+            return;
+        }
+
+        SurfaceVerticesByMeshId[mesh.GetInstanceID()] = vertices;
+    }
+
+    static void ForgetSurfaceVertices(Mesh mesh)
+    {
+        if (mesh == null)
+        {
+            return;
+        }
+
+        SurfaceVerticesByMeshId.Remove(mesh.GetInstanceID());
     }
 
     /// <summary>
@@ -402,15 +457,20 @@ public static class PlanetFlightChunkMeshCache
             return;
         }
 
-        var normals = new Vector3[vertices.Length];
+        if (radialNormalsScratch == null)
+        {
+            radialNormalsScratch = new List<Vector3>(vertices.Length);
+        }
+
+        radialNormalsScratch.Clear();
         for (int i = 0; i < vertices.Length; i++)
         {
             Vector3 vertex = vertices[i];
             float magnitude = vertex.magnitude;
-            normals[i] = magnitude > 1e-8f ? vertex / magnitude : Vector3.up;
+            radialNormalsScratch.Add(magnitude > 1e-8f ? vertex / magnitude : Vector3.up);
         }
 
-        mesh.normals = normals;
+        mesh.SetNormals(radialNormalsScratch);
     }
 
     static void SanitizeVerticesInPlace(Vector3[] vertices)

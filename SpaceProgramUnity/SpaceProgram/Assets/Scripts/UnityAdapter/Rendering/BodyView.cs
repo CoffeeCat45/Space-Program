@@ -2160,14 +2160,12 @@ static class BodyView
                 planetCenterWorld,
                 shipCenterWorld
             );
-            bodyObject.transform.localPosition = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(
+            Vector3 lodLocal = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(
                 WorldVisualBridge.GetPlanetSurfaceHeightOffsetMeters(simulation)
             );
-
-            if (!IsFiniteVector(bodyObject.transform.localPosition))
-            {
-                bodyObject.transform.localPosition = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(0.0);
-            }
+            bodyObject.transform.localPosition = IsFiniteVector(lodLocal) ?
+                lodLocal :
+                WorldVisualBridge.GetFlightPlanetFixedLocalPosition(0.0);
 
             global::SimQuaternion lodSpin = ResolveLodBodySpin(simulation);
             Quaternion flightRotation = WorldVisualBridge.GetFlightPlanetLocalRotation(
@@ -2218,14 +2216,19 @@ static class BodyView
         ResetCelestialParentScale(bodyObject);
 
         global::SimVector3 relative = bodyCenterWorld.Subtract(shipCenterWorld);
-        global::SimQuaternion lodSpin = ResolveLodBodySpin(simulation);
-        Quaternion lodFlight = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(
-            WorldVisualBridge.ResolveBodyFixedDirectionUnderShip(simulation, lodSpin)
-        );
-        Quaternion inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
-            lodFlight,
-            lodSpin
-        );
+        if (!WorldVisualBridge.TryGetFlightVisualInertialToFlight(
+            out Quaternion inertialToFlight
+        ))
+        {
+            global::SimQuaternion lodSpin = ResolveLodBodySpin(simulation);
+            Quaternion lodFlight = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(
+                WorldVisualBridge.ResolveBodyFixedDirectionUnderShip(simulation, lodSpin)
+            );
+            inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
+                lodFlight,
+                lodSpin
+            );
+        }
         Vector3 flightPosition = WorldVisualBridge.InertialOffsetToFlight(
             relative,
             inertialToFlight
@@ -2248,10 +2251,16 @@ static class BodyView
             flightPosition *= distantScale;
         }
 
-        bodyObject.transform.localPosition = WorldVisualBridge.GetFlightDistantBodyLocalPosition(
+        Vector3 distantLocal = WorldVisualBridge.GetFlightDistantBodyLocalPosition(
             flightPosition,
             WorldVisualBridge.GetFlightUniverseRootLocalPosition(bodyObject.transform)
         );
+        if (!IsFiniteVector(distantLocal))
+        {
+            return;
+        }
+
+        bodyObject.transform.localPosition = distantLocal;
         bodyObject.transform.localScale =
             GetCelestialVisualScale(bodyState.radius, WorldVisualBridge.FlightPositionScale) *
             distantScale;

@@ -94,7 +94,9 @@ partial class Simulation
             return 0.0;
         }
 
-        SimVector3 relativeVelocity = ship.velocity.Subtract(primary.velocity);
+        SimVector3 relativeVelocity = ship.velocity.Subtract(
+            primary.GetAbsoluteSurfaceVelocityAt(ship.GetCenterOfMassWorld())
+        );
         SimVector3 surfaceNormal = GetSurfaceNormal(primary);
         double verticalSpeed = SimVector3.Dot(relativeVelocity, surfaceNormal);
         SimVector3 horizontal = relativeVelocity.Subtract(

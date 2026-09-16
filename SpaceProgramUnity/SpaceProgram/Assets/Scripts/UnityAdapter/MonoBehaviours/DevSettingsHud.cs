@@ -29,7 +29,7 @@ public sealed class DevSettingsHud : MonoBehaviour
     Vector2 shipDebugScroll;
 
     const float MenuWidth = 360f;
-    const float MenuHeight = 560f;
+    const float MenuHeight = 600f;
     const float ShipDebugWidth = 400f;
     const float ShipDebugHeight = 500f;
     const float TitleDragHeight = 34f;
@@ -49,7 +49,9 @@ public sealed class DevSettingsHud : MonoBehaviour
             !runner.IsInitialized ||
             runner.IsMainMenuVisible ||
             runner.IsVabEditorActive ||
-            FlightLodLoadingOverlay.IsBlocking
+            FlightLodLoadingOverlay.IsBlocking ||
+            FlightHudSettingsUi.IsOpen ||
+            FlightDebugSettingsUi.IsOpen
         )
         {
             return;
@@ -66,13 +68,19 @@ public sealed class DevSettingsHud : MonoBehaviour
 
         if (!showMenu && !showShipDebugWindow)
         {
-            DrawPlanetLodLoadStatus(buttonX, buttonY, panelWidth);
+            if (FlightDebugSettings.IsVisible(FlightDebugOverlay.LodChunks))
+            {
+                DrawPlanetLodLoadStatus(buttonX, buttonY, panelWidth);
+            }
 
-            if (GUI.Button(
-                new Rect(buttonX, buttonY, panelWidth, buttonHeight),
-                T("Developer settings"),
-                buttonStyle
-            ))
+            if (
+                FlightDebugSettings.IsVisible(FlightDebugOverlay.DeveloperSettings) &&
+                GUI.Button(
+                    new Rect(buttonX, buttonY, panelWidth, buttonHeight),
+                    T("Developer settings"),
+                    buttonStyle
+                )
+            )
             {
                 showMenu = true;
             }
@@ -175,6 +183,17 @@ public sealed class DevSettingsHud : MonoBehaviour
         if (GUILayout.Button(fuelLabel, buttonStyle))
         {
             DevSettings.SetInfiniteFuel(!DevSettings.InfiniteFuel);
+        }
+
+        DraggableGap(6f);
+
+        string crashLabel = DevSettings.DisableCrashDamage ?
+            T("No crash damage") + ": " + T("On") :
+            T("No crash damage") + ": " + T("Off");
+
+        if (GUILayout.Button(crashLabel, buttonStyle))
+        {
+            DevSettings.SetDisableCrashDamage(!DevSettings.DisableCrashDamage);
         }
 
         DraggableGap(10f);

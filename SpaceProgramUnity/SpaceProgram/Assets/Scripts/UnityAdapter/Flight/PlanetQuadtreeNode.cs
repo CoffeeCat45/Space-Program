@@ -31,8 +31,19 @@ sealed class PlanetQuadtreeNode
     Mesh chunkMesh;
     Mesh sharedCacheMesh;
     Mesh stitchedMesh;
+    Vector3[] cachedSurfaceVertices;
+    Vector3[] cachedDrawnVertices;
     MeshCollider meshCollider;
     PlanetChunkDebugOutline debugOutline;
+    static readonly PlanetChunkEdgeSide[] NeighborEdgeSides =
+    {
+        PlanetChunkEdgeSide.MinU,
+        PlanetChunkEdgeSide.MaxU,
+        PlanetChunkEdgeSide.MinV,
+        PlanetChunkEdgeSide.MaxV
+    };
+    static int[] stitchEdgeIndexScratchA;
+    static int[] stitchEdgeIndexScratchB;
     bool meshBuildInFlight;
     int meshBuildGeneration;
 
@@ -98,14 +109,9 @@ sealed class PlanetQuadtreeNode
 
     internal bool IsViewerFinestQuadMember()
     {
-        if (ChunkContainsViewerSurface())
-        {
-            return true;
-        }
-
-        return parent != null &&
-            parent.ContainsViewerSurfaceDirection() &&
-            level == lod.GetViewerLeafLevel();
+        return PlanetPqsLodRules.NodeIsViewerFinestQuadMember(
+            ChunkContainsViewerSurface(),
+            parent != null && parent.ContainsViewerSurfaceDirection());
     }
 
     bool WantsSiblingBalanceSplit()
@@ -274,7 +280,7 @@ sealed class PlanetQuadtreeNode
                 return meshBuildInFlight;
             }
 
-            if (splitsUsed >= splitBudget)
+            if (splitsUsed >= splitBudget || lod.IsLodTickTimeBudgetExhausted())
             {
                 return true;
             }
@@ -462,7 +468,7 @@ sealed class PlanetQuadtreeNode
         }
 
         if (lod.ViewerAltitudeMeters >=
-            (float)WorldVisualBridge.PadPlanetRotationLockAltitudeMeters)
+            PlanetLodAltitudePolicy.GetPadForceSplitAltitudeMeters(lod.PlanetRadius))
         {
             return false;
         }
@@ -487,7 +493,8 @@ sealed class PlanetQuadtreeNode
         if (PlanetPqsLodRules.AngularRingCapBlocksSplit(
                 level,
                 lod.GetAngularRingLodCap(this),
-                IsCoarserEdgeNeighborOfViewer()))
+                IsCoarserEdgeNeighborOfViewer(),
+                lod.ViewerIsBelowMaxLod()))
         {
             return false;
         }
@@ -571,7 +578,8 @@ sealed class PlanetQuadtreeNode
         if (PlanetPqsLodRules.AngularRingCapBlocksSplit(
                 level,
                 lod.GetAngularRingLodCap(this),
-                IsCoarserEdgeNeighborOfViewer()))
+                IsCoarserEdgeNeighborOfViewer(),
+                lod.ViewerIsBelowMaxLod()))
         {
             return false;
         }
@@ -774,6 +782,11 @@ sealed class PlanetQuadtreeNode
             return true;
         }
 
+        if (lod.IsFaceCenterCatchUpProtected(this))
+        {
+            return false;
+        }
+
         if (ShouldMergeForAngularRing())
         {
             return true;
@@ -782,7 +795,7 @@ sealed class PlanetQuadtreeNode
         if (
             ContainsViewerSurfaceSubtree() &&
             lod.ViewerAltitudeMeters <
-                (float)WorldVisualBridge.PadPlanetRotationLockAltitudeMeters
+                PlanetLodAltitudePolicy.GetViewerSubtreeProtectAltitudeMeters(lod.PlanetRadius)
         )
         {
             return false;
@@ -813,11 +826,24 @@ sealed class PlanetQuadtreeNode
             return false;
         }
 
+        if (!PlanetPqsLodRules.AngularRingMayMergeParent(
+                ContainsViewerSurfaceSubtree() || lod.NodeContainsCachedViewerUv(this)))
+        {
+            return false;
+        }
+
+        if (lod.IsFaceCenterCatchUpProtected(this))
+        {
+            return false;
+        }
+
         if (!PlanetPqsLodRules.AllowAngularRingMerge(lod.ViewerLeafBlockedByCrack()))
         {
             return false;
         }
 
+        bool anyOverCap = false;
+        bool anyAtOrUnderCap = false;
         for (int i = 0; i < children.Length; i++)
         {
             PlanetQuadtreeNode child = children[i];
@@ -843,11 +869,15 @@ sealed class PlanetQuadtreeNode
 
             if (child.level > cap)
             {
-                return true;
+                anyOverCap = true;
+            }
+            else
+            {
+                anyAtOrUnderCap = true;
             }
         }
 
-        return false;
+        return PlanetPqsLodRules.AngularRingParentShouldMerge(anyOverCap, anyAtOrUnderCap);
     }
 
     /// <summary>
@@ -965,12 +995,12 @@ sealed class PlanetQuadtreeNode
             // Rent now, not when the async mesh attaches. Several Split()s in one
             // tick used to all pass CanAllocate and land at chunks=642/640.
             children[i].EnsureChunkObject();
-            children[i].QueueLeafMeshBuild();
         }
 
         EnsureParentCoverageActive();
         parent?.NotifyChildSubtreeChanged();
         NotifyAdjacentLeavesToRestitch();
+        lod.RecordLodFlap("split", this);
     }
 
     internal void NotifyChildSubtreeChanged()
@@ -1050,6 +1080,7 @@ sealed class PlanetQuadtreeNode
         SetChunkObjectVisible(true);
         NotifyAdjacentLeavesToRestitch();
         ApplyNeighborEdgeStitch();
+        lod.RecordLodFlap("merge", this);
     }
 
     bool TryEnsureMeshBeforeSplit()
@@ -1275,6 +1306,8 @@ sealed class PlanetQuadtreeNode
         EnsureChunkObject();
         sharedCacheMesh = sourceMesh;
         chunkMesh = sourceMesh;
+        cachedSurfaceVertices = PlanetFlightChunkMeshCache.GetSurfaceVertices(sourceMesh);
+        cachedDrawnVertices = cachedSurfaceVertices;
 
         MeshFilter meshFilter = chunkObject.GetComponent<MeshFilter>();
 
@@ -1340,7 +1373,7 @@ sealed class PlanetQuadtreeNode
         }
 
         int resolution = ResolveChunkResolution();
-        Vector3[] cacheVerts = sharedCacheMesh.vertices;
+        Vector3[] cacheVerts = GetCachedSurfaceVertices();
         if (cacheVerts == null || cacheVerts.Length < resolution * resolution)
         {
             BindDrawnMesh(sharedCacheMesh);
@@ -1390,6 +1423,7 @@ sealed class PlanetQuadtreeNode
         if (!anyStitch)
         {
             DestroyStitchedClone();
+            cachedDrawnVertices = cachedSurfaceVertices;
             BindDrawnMesh(sharedCacheMesh);
             return;
         }
@@ -1405,6 +1439,7 @@ sealed class PlanetQuadtreeNode
         PlanetFlightChunkMeshCache.AssignRadialOutwardNormals(stitchedMesh, working);
         stitchedMesh.RecalculateBounds();
         chunkMesh = stitchedMesh;
+        cachedDrawnVertices = working;
         BindDrawnMesh(stitchedMesh);
     }
 
@@ -1427,20 +1462,14 @@ sealed class PlanetQuadtreeNode
             return;
         }
 
-        Mesh neighborMesh = neighbor.chunkMesh;
-        if (neighborMesh == null)
-        {
-            return;
-        }
-
-        Vector3[] neighborVerts = neighborMesh.vertices;
+        Vector3[] neighborVerts = neighbor.GetCachedDrawnVertices();
         int neighborRes = neighbor.ResolveChunkResolution();
         if (neighborVerts == null || neighborVerts.Length < neighborRes * neighborRes)
         {
             return;
         }
 
-        int[] ourIndices = new int[resolution];
+        int[] ourIndices = EnsureEdgeIndexScratch(ref stitchEdgeIndexScratchA, resolution);
         FillEdgeIndices(ourIndices, resolution, ourEdge);
         Vector3 ourMid = cacheVerts[ourIndices[resolution / 2]];
         PlanetChunkEdgeSide neighborEdge = PickClosestNeighborEdge(
@@ -1507,6 +1536,11 @@ sealed class PlanetQuadtreeNode
         }
 
         chunkMesh = mesh;
+        if (mesh == sharedCacheMesh)
+        {
+            cachedDrawnVertices = cachedSurfaceVertices;
+        }
+
         MeshFilter meshFilter = chunkObject.GetComponent<MeshFilter>();
         if (meshFilter != null)
         {
@@ -1547,6 +1581,43 @@ sealed class PlanetQuadtreeNode
 
         Object.Destroy(stitchedMesh);
         stitchedMesh = null;
+        cachedDrawnVertices = cachedSurfaceVertices;
+    }
+
+    Vector3[] GetCachedSurfaceVertices()
+    {
+        if (cachedSurfaceVertices != null)
+        {
+            return cachedSurfaceVertices;
+        }
+
+        cachedSurfaceVertices = PlanetFlightChunkMeshCache.GetSurfaceVertices(sharedCacheMesh);
+        if (cachedDrawnVertices == null)
+        {
+            cachedDrawnVertices = cachedSurfaceVertices;
+        }
+
+        return cachedSurfaceVertices;
+    }
+
+    Vector3[] GetCachedDrawnVertices()
+    {
+        if (cachedDrawnVertices != null)
+        {
+            return cachedDrawnVertices;
+        }
+
+        return GetCachedSurfaceVertices();
+    }
+
+    static int[] EnsureEdgeIndexScratch(ref int[] scratch, int resolution)
+    {
+        if (scratch == null || scratch.Length < resolution)
+        {
+            scratch = new int[resolution];
+        }
+
+        return scratch;
     }
 
     static void FillEdgeIndices(int[] indices, int resolution, PlanetChunkEdgeSide edge)
@@ -1580,27 +1651,19 @@ sealed class PlanetQuadtreeNode
     {
         PlanetChunkEdgeSide best = PlanetChunkEdgeSide.MinU;
         float bestDist = float.MaxValue;
-        PlanetChunkEdgeSide[] sides =
-        {
-            PlanetChunkEdgeSide.MinU,
-            PlanetChunkEdgeSide.MaxU,
-            PlanetChunkEdgeSide.MinV,
-            PlanetChunkEdgeSide.MaxV
-        };
-
-        for (int s = 0; s < sides.Length; s++)
+        for (int s = 0; s < NeighborEdgeSides.Length; s++)
         {
             Vector3 point = ClosestPointOnGridEdge(
                 neighborVerts,
                 neighborRes,
-                sides[s],
+                NeighborEdgeSides[s],
                 ourMid
             );
             float dist = (point - ourMid).sqrMagnitude;
             if (dist < bestDist)
             {
                 bestDist = dist;
-                best = sides[s];
+                best = NeighborEdgeSides[s];
             }
         }
 
@@ -1614,7 +1677,7 @@ sealed class PlanetQuadtreeNode
         Vector3 point
     )
     {
-        int[] indices = new int[resolution];
+        int[] indices = EnsureEdgeIndexScratch(ref stitchEdgeIndexScratchB, resolution);
         FillEdgeIndices(indices, resolution, edge);
         Vector3 best = verts[indices[0]];
         float bestDist = (best - point).sqrMagnitude;
@@ -1956,6 +2019,8 @@ sealed class PlanetQuadtreeNode
         meshBuildGeneration++;
         DestroyStitchedClone();
         sharedCacheMesh = null;
+        cachedSurfaceVertices = null;
+        cachedDrawnVertices = null;
         UnbindChunkMesh();
 
         if (debugOutline != null)
@@ -3011,7 +3076,8 @@ sealed class PlanetQuadtreeNode
         if (PlanetPqsLodRules.AngularRingCapBlocksSplit(
                 level,
                 ringCap,
-                IsCoarserEdgeNeighborOfViewer()))
+                IsCoarserEdgeNeighborOfViewer(),
+                lod.ViewerIsBelowMaxLod()))
         {
             return "RING cap=" + ringCap;
         }
@@ -3133,8 +3199,18 @@ sealed class PlanetQuadtreeLod
     int lastMaxLodCeiling = -1;
     int activeMaxLodFrame = -1;
     int leavesNeedingMeshCount;
+    float lodTickDeadlineUnscaled;
     int neighborCatchUpSplitsUsed;
     int neighborCatchUpSplitBudget;
+    int tickSplitCount;
+    int tickMergeCount;
+    int lastTickSplitCount;
+    int lastTickMergeCount;
+    string lastFlapSummary = "";
+    const int MaxFlapLogEntries = 8;
+    readonly string[] flapLog = new string[MaxFlapLogEntries];
+    int flapLogCount;
+    int flapLogWrite;
     internal bool HoldNonViewerSplits;
     internal bool LastTickHeldNonViewerSplits;
     bool starveNonPadFinestThisTick;
@@ -3316,7 +3392,7 @@ sealed class PlanetQuadtreeLod
         return PlanetLodAltitudePolicy.GetAltitudeFraction(
                 ViewerAltitudeMeters,
                 PlanetRadius
-            ) >= PlanetLodAltitudePolicy.MapShellChunkHideFraction;
+            ) >= PlanetLodAltitudePolicy.GetMapShellChunkHideFraction(PlanetRadius);
     }
 
     internal float ComputeMergeDistanceMeters(PlanetQuadtreeNode node)
@@ -3624,7 +3700,16 @@ sealed class PlanetQuadtreeLod
         sb.Append(SyncInDiskMeshes ? "1" : "0");
         sb.Append(" hardBP=");
         sb.Append(IsHardBackpressureActive() ? "1" : "0");
+        sb.Append(" flap s=");
+        sb.Append(lastTickSplitCount);
+        sb.Append(" m=");
+        sb.Append(lastTickMergeCount);
         sb.AppendLine();
+        if (!string.IsNullOrEmpty(lastFlapSummary))
+        {
+            sb.Append("lastFlap ");
+            sb.AppendLine(lastFlapSummary);
+        }
         sb.Append("focus F");
         sb.Append(cachedViewerUvValid ? cachedViewerFace.ToString() : "?");
         if (cachedViewerUvValid)
@@ -3843,11 +3928,48 @@ sealed class PlanetQuadtreeLod
     public void RefreshLod()
     {
         RefreshLodBudgeted(int.MaxValue, int.MaxValue);
+        FeedPendingMeshQueue(int.MaxValue);
+    }
+
+    /// <summary>
+    /// Time warp skips splits/mesh (those hitch at x1). Still coarsen so 2×2 merges
+    /// follow altitude during warp instead of dumping when the scale returns to 1.
+    /// </summary>
+    public void CoarsenForAltitudeOnly()
+    {
+        UpdateViewerFrame();
+        UpdateSmoothedLodAltitude();
+        SyncViewerFocusDirections();
+        AsyncLodSettings.MeshCullBudgetRemaining = AsyncLodSettings.MaxMeshDestroysPerFrame;
+        AsyncLodSettings.UnloadMergeBudgetRemaining = Mathf.Max(
+            8,
+            AsyncLodSettings.MaxUnloadMergesPerFrame * 4
+        );
+        ApplyLodCapSplitPolicy();
+        RunViewConeMaintenance();
+        SyncDrawnCoverage();
+        UpdateLeafMeshStats();
     }
 
     public void RefreshLodBudgeted(int splitBudget, int meshBuildBudget)
     {
         RefreshLodLookAhead(splitBudget, meshBuildBudget, allowNeighborSync: true);
+    }
+
+    internal void BeginLodTickTimeBudget(float maxMilliseconds)
+    {
+        lodTickDeadlineUnscaled = Time.realtimeSinceStartup + Mathf.Max(0.001f, maxMilliseconds) * 0.001f;
+    }
+
+    internal void ClearLodTickTimeBudget()
+    {
+        lodTickDeadlineUnscaled = 0f;
+    }
+
+    internal bool IsLodTickTimeBudgetExhausted()
+    {
+        return lodTickDeadlineUnscaled > 0f &&
+            Time.realtimeSinceStartup >= lodTickDeadlineUnscaled;
     }
 
     public void RefreshLodLookAhead(
@@ -3859,6 +3981,10 @@ sealed class PlanetQuadtreeLod
         UpdateViewerFrame();
         UpdateSmoothedLodAltitude();
         SyncViewerFocusDirections();
+        tickSplitCount = 0;
+        tickMergeCount = 0;
+        flapLogCount = 0;
+        flapLogWrite = 0;
 
         int splitBudget = Mathf.Max(1, peripheralSplitBudget);
         int meshBudget = Mathf.Max(1, peripheralMeshBudget);
@@ -3908,13 +4034,19 @@ sealed class PlanetQuadtreeLod
             SynchronizeNeighborLevels(neighborBudget);
         }
 
-        BuildMeshesForNearestLeaves(meshBudget);
         RunViewConeMaintenance();
-        SyncDrawnCoverage();
         UpdateLeafMeshStats();
         HoldNonViewerSplits = false;
         LastLodRefreshHadPendingWork =
-            pending || HasPendingLodWork() || neighborCatchUpSplitsUsed > 0;
+            pending ||
+            HasPendingLodWork() ||
+            neighborCatchUpSplitsUsed > 0 ||
+            IsLodTickTimeBudgetExhausted();
+        lastTickSplitCount = tickSplitCount;
+        lastTickMergeCount = tickMergeCount;
+        lastFlapSummary = FormatFlapLog();
+        tickSplitCount = 0;
+        tickMergeCount = 0;
     }
 
     bool RefreshFaceRootsViewerFirst(
@@ -4013,7 +4145,7 @@ sealed class PlanetQuadtreeLod
 
     public void FeedPendingMeshQueue(int meshBudget)
     {
-        if (meshBudget <= 0 || leavesNeedingMeshCount <= 0)
+        if (meshBudget <= 0)
         {
             return;
         }
@@ -4219,6 +4351,81 @@ sealed class PlanetQuadtreeLod
         return WorldVisualBridge.GetLaunchSiteNormalUnity();
     }
 
+    internal bool NodeContainsCachedViewerUv(PlanetQuadtreeNode node)
+    {
+        if (!cachedViewerUvValid || node == null || cachedViewerFace != node.FaceIndex)
+        {
+            return false;
+        }
+
+        return PlanetPqsLodRules.UvInsideLodNode(
+            cachedViewerU,
+            cachedViewerV,
+            node.MinU,
+            node.MaxU,
+            node.MinV,
+            node.MaxV
+        );
+    }
+
+    internal bool IsFaceCenterCatchUpProtected(PlanetQuadtreeNode node)
+    {
+        if (node == null || !cachedViewerUvValid)
+        {
+            return false;
+        }
+
+        return PlanetPqsLodRules.FaceCenterCatchUpTileMustNotMerge(
+            PlanetPqsLodRules.FaceCenterPadNeedsCrossL1CatchUp(
+                cachedViewerU,
+                cachedViewerV),
+            PlanetPqsLodRules.NodeUvTouchesFaceCenter(
+                node.MinU,
+                node.MaxU,
+                node.MinV,
+                node.MaxV),
+            node.Level,
+            GetViewerLeafLevel()
+        );
+    }
+
+    internal bool FaceCenterL1sNeedViewerLod()
+    {
+        if (!cachedViewerUvValid ||
+            faceRoots == null ||
+            cachedViewerFace < 0 ||
+            cachedViewerFace >= faceRoots.Length ||
+            !PlanetPqsLodRules.FaceCenterPadNeedsCrossL1CatchUp(
+                cachedViewerU,
+                cachedViewerV))
+        {
+            return false;
+        }
+
+        int viewerLevel = GetViewerLeafLevel();
+        if (viewerLevel < 0)
+        {
+            return false;
+        }
+
+        PlanetQuadtreeNode faceRoot = faceRoots[cachedViewerFace];
+        if (faceRoot == null || faceRoot.DiagChildren == null)
+        {
+            return false;
+        }
+
+        PlanetQuadtreeNode[] quads = faceRoot.DiagChildren;
+        for (int i = 0; i < quads.Length; i++)
+        {
+            if (quads[i].CollectFinestLeafLevel() < viewerLevel)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal void CacheViewerFaceUv()
     {
         cachedViewerUvValid = PlanetCubeSphere.TryDirectionToFaceUv(
@@ -4420,7 +4627,7 @@ sealed class PlanetQuadtreeLod
 
     void SynchronizeNeighborLevels(int splitBudget)
     {
-        if (splitBudget <= 0 || !CanAllocateMoreChunks())
+        if (splitBudget <= 0 || !CanAllocateMoreChunks() || IsLodTickTimeBudgetExhausted())
         {
             return;
         }
@@ -4432,7 +4639,8 @@ sealed class PlanetQuadtreeLod
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
             if (neighborCatchUpSplitsUsed >= neighborCatchUpSplitBudget ||
-                !CanAllocateMoreChunks())
+                !CanAllocateMoreChunks() ||
+                IsLodTickTimeBudgetExhausted())
             {
                 break;
             }
@@ -4468,6 +4676,13 @@ sealed class PlanetQuadtreeLod
             return false;
         }
 
+        if (!PlanetPqsLodRules.AllowCatchUpFromLeaf(
+                leaf.ContainsViewerSurfaceDirection(),
+                ViewerLeafNeedsSplit()))
+        {
+            return false;
+        }
+
         const float edgeEpsilon = 1e-5f;
         float midU = (leaf.MinU + leaf.MaxU) * 0.5f;
         float midV = (leaf.MinV + leaf.MaxV) * 0.5f;
@@ -4491,10 +4706,42 @@ sealed class PlanetQuadtreeLod
             changed |= EnsureNeighborLevelAt(leaf, diagU, diagV, leaf.Level);
         }
 
-        changed |= EnsureNeighborLevelAt(leaf, leaf.MinU - uSpan * 0.25f, midV, minNeighborLevel);
-        changed |= EnsureNeighborLevelAt(leaf, leaf.MaxU + uSpan * 0.25f, midV, minNeighborLevel);
-        changed |= EnsureNeighborLevelAt(leaf, midU, leaf.MinV - vSpan * 0.25f, minNeighborLevel);
-        changed |= EnsureNeighborLevelAt(leaf, midU, leaf.MaxV + vSpan * 0.25f, minNeighborLevel);
+        changed |= EnsureNeighborLevelAt(
+            leaf,
+            leaf.MinU - uSpan * 0.25f,
+            midV,
+            FaceCenterEdgeCatchUpRequired(
+                leaf,
+                minNeighborLevel,
+                leaf.MinU - uSpan * 0.25f,
+                midV));
+        changed |= EnsureNeighborLevelAt(
+            leaf,
+            leaf.MaxU + uSpan * 0.25f,
+            midV,
+            FaceCenterEdgeCatchUpRequired(
+                leaf,
+                minNeighborLevel,
+                leaf.MaxU + uSpan * 0.25f,
+                midV));
+        changed |= EnsureNeighborLevelAt(
+            leaf,
+            midU,
+            leaf.MinV - vSpan * 0.25f,
+            FaceCenterEdgeCatchUpRequired(
+                leaf,
+                minNeighborLevel,
+                midU,
+                leaf.MinV - vSpan * 0.25f));
+        changed |= EnsureNeighborLevelAt(
+            leaf,
+            midU,
+            leaf.MaxV + vSpan * 0.25f,
+            FaceCenterEdgeCatchUpRequired(
+                leaf,
+                minNeighborLevel,
+                midU,
+                leaf.MaxV + vSpan * 0.25f));
 
         return changed;
     }
@@ -4528,6 +4775,30 @@ sealed class PlanetQuadtreeLod
         probeU = (float)du;
         probeV = (float)dv;
         return true;
+    }
+
+    int FaceCenterEdgeCatchUpRequired(
+        PlanetQuadtreeNode leaf,
+        int defaultRequired,
+        float probeU,
+        float probeV
+    )
+    {
+        if (leaf == null ||
+            !leaf.ContainsViewerSurfaceDirection() ||
+            !cachedViewerUvValid)
+        {
+            return defaultRequired;
+        }
+
+        return PlanetPqsLodRules.FaceCenterCrossL1CatchUpRequired(
+            defaultRequired,
+            leaf.Level,
+            cachedViewerU,
+            cachedViewerV,
+            probeU,
+            probeV
+        );
     }
 
     bool EnsureNeighborLevelAt(
@@ -4749,6 +5020,67 @@ sealed class PlanetQuadtreeLod
         return -1;
     }
 
+    internal bool ViewerIsBelowMaxLod()
+    {
+        int viewerLevel = GetViewerLeafLevel();
+        return viewerLevel >= 0 && viewerLevel < GetActiveMaxLodLevel();
+    }
+
+    internal void RecordLodFlap(string verb, PlanetQuadtreeNode node)
+    {
+        if (node == null)
+        {
+            return;
+        }
+
+        if (verb == "split")
+        {
+            tickSplitCount++;
+        }
+        else
+        {
+            tickMergeCount++;
+        }
+
+        flapLog[flapLogWrite] =
+            verb +
+            " F" +
+            node.FaceIndex +
+            " L" +
+            node.Level +
+            " " +
+            node.MinU.ToString("F2") +
+            "," +
+            node.MinV.ToString("F2");
+        flapLogWrite = (flapLogWrite + 1) % MaxFlapLogEntries;
+        if (flapLogCount < MaxFlapLogEntries)
+        {
+            flapLogCount++;
+        }
+    }
+
+    string FormatFlapLog()
+    {
+        if (flapLogCount <= 0)
+        {
+            return "";
+        }
+
+        int start = flapLogCount < MaxFlapLogEntries ? 0 : flapLogWrite;
+        var sb = new StringBuilder(128);
+        for (int i = 0; i < flapLogCount; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(" | ");
+            }
+
+            sb.Append(flapLog[(start + i) % MaxFlapLogEntries]);
+        }
+
+        return sb.ToString();
+    }
+
     internal bool ViewerLeafNeedsSplit()
     {
         if (faceRoots == null)
@@ -4778,10 +5110,22 @@ sealed class PlanetQuadtreeLod
         for (int i = 0; i < faceRoots.Length; i++)
         {
             PlanetQuadtreeNode leaf = faceRoots[i].FindViewerLeaf();
-            if (leaf != null)
+            if (leaf == null)
+            {
+                continue;
+            }
+
+            if (leaf.IsLeaf)
             {
                 return leaf;
             }
+
+            if (cachedViewerUvValid && cachedViewerFace == leaf.FaceIndex)
+            {
+                return leaf.FindLeafNodeAt(cachedViewerU, cachedViewerV);
+            }
+
+            return leaf;
         }
 
         return null;
@@ -4946,6 +5290,7 @@ sealed class PlanetQuadtreeLod
     public void RefreshLodImmediate()
     {
         RefreshLodBudgeted(int.MaxValue, int.MaxValue);
+        FeedPendingMeshQueue(int.MaxValue);
     }
 
     public void RefreshViewerFaceLodLookAhead(

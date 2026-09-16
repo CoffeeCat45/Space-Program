@@ -12,6 +12,8 @@ public sealed class ShareBuildExporterTests
         data.hud.language = "Russian";
         data.hud.background = "Dim";
         data.hud.hiddenFields = new[] { "Keys", "Language", "MissionHint" };
+        data.debug.hiddenOverlays = new[] { "Fps", "Gfx", "DeveloperSettings" };
+        data.play.speedReferenceCycleKey = "N";
 
         string json = JsonUtility.ToJson(data, prettyPrint: true);
         var parsed = new GameSettingsData();
@@ -23,12 +25,18 @@ public sealed class ShareBuildExporterTests
             new[] { "Keys", "Language", "MissionHint" },
             parsed.hud.hiddenFields
         );
+        CollectionAssert.AreEqual(
+            new[] { "Fps", "Gfx", "DeveloperSettings" },
+            parsed.debug.hiddenOverlays
+        );
+        Assert.AreEqual("N", parsed.play.speedReferenceCycleKey);
     }
 
     [Test]
     public void TryCopyEditorSettingsJson_WritesAuthorSettingsNextToDestination()
     {
         FlightHudSettings.Unload();
+        FlightDebugSettings.Unload();
         Assert.IsTrue(File.Exists(GameSettingsStore.FilePath));
 
         string destination = Path.Combine(
@@ -102,6 +110,7 @@ public sealed class ShareBuildExporterTests
 
             GameSettingsStore.ReloadFromDisk();
             FlightHudSettings.Unload();
+            FlightDebugSettings.Unload();
 
             FlightHudField[] fields = (FlightHudField[])Enum.GetValues(typeof(FlightHudField));
             bool[] allVisible = new bool[fields.Length];
@@ -134,6 +143,35 @@ public sealed class ShareBuildExporterTests
         });
     }
 
+    [Test]
+    public void TryCopyEditorSettingsJson_FlushesLoadedDebugOverlaysIntoCopiedFile()
+    {
+        WithRestoredEditorSettings(() =>
+        {
+            FlightDebugSettings.Load();
+            FlightDebugSettings.SetAllVisible(true);
+            FlightDebugSettings.SetVisible(FlightDebugOverlay.Fps, false);
+            FlightDebugSettings.SetVisible(FlightDebugOverlay.Camera, false);
+            FlightDebugSettings.SetVisible(FlightDebugOverlay.Gfx, true);
+
+            string destination = CreateTempDirectory("ShareBuildDebugFlush-");
+            try
+            {
+                Assert.IsTrue(ShareBuildExporter.TryCopyEditorSettingsJson(destination));
+                GameSettingsDebug debug = ParseDebug(
+                    File.ReadAllText(Path.Combine(destination, GameSettingsStore.FileName))
+                );
+                CollectionAssert.Contains(debug.hiddenOverlays, "Fps");
+                CollectionAssert.Contains(debug.hiddenOverlays, "Camera");
+                CollectionAssert.DoesNotContain(debug.hiddenOverlays, "Gfx");
+            }
+            finally
+            {
+                Directory.Delete(destination, recursive: true);
+            }
+        });
+    }
+
     static string CreateTempDirectory(string prefix)
     {
         string destination = Path.Combine(
@@ -150,6 +188,15 @@ public sealed class ShareBuildExporterTests
         JsonUtility.FromJsonOverwrite(json, parsed);
         Assert.IsNotNull(parsed.hud);
         return parsed.hud;
+    }
+
+    static GameSettingsDebug ParseDebug(string json)
+    {
+        var parsed = new GameSettingsData();
+        JsonUtility.FromJsonOverwrite(json, parsed);
+        Assert.IsNotNull(parsed.debug);
+        Assert.IsNotNull(parsed.debug.hiddenOverlays);
+        return parsed.debug;
     }
 
     static void WithRestoredEditorSettings(Action body)
@@ -175,9 +222,11 @@ public sealed class ShareBuildExporterTests
 
             GameSettingsStore.ReloadFromDisk();
             FlightHudSettings.Unload();
+            FlightDebugSettings.Unload();
             if (File.Exists(path))
             {
                 FlightHudSettings.Reload();
+                FlightDebugSettings.Reload();
             }
         }
     }

@@ -1,7 +1,7 @@
 using System;
 
 /// <summary>
-/// One JSON blob for graphics / HUD / developer options. Not a world save.
+/// One JSON blob for graphics / HUD / debug chrome / developer options. Not a world save.
 /// </summary>
 [Serializable]
 public sealed class GameSettingsData
@@ -9,6 +9,7 @@ public sealed class GameSettingsData
     public int version = 1;
     public GameSettingsGraphics graphics = new GameSettingsGraphics();
     public GameSettingsHud hud = new GameSettingsHud();
+    public GameSettingsDebug debug = new GameSettingsDebug();
     public GameSettingsDeveloper developer = new GameSettingsDeveloper();
     public GameSettingsPlay play = new GameSettingsPlay();
 }
@@ -41,6 +42,7 @@ public sealed class GameSettingsGraphics
     public int postAaQuality = 1;
     public int displayMode;
     public int targetFrameRate;
+    public bool partEnvironmentReflections;
 }
 
 [Serializable]
@@ -52,6 +54,12 @@ public sealed class GameSettingsHud
 }
 
 [Serializable]
+public sealed class GameSettingsDebug
+{
+    public string[] hiddenOverlays = Array.Empty<string>();
+}
+
+[Serializable]
 public sealed class GameSettingsDeveloper
 {
     public bool infiniteFuel;
@@ -60,6 +68,7 @@ public sealed class GameSettingsDeveloper
     public bool atmosphereVisualsDisabled;
     public float atmosphereOpacity = 1f;
     public bool planetSpinDisabled;
+    public bool disableCrashDamage;
     public bool shipTrailEnabled = true;
     public bool soiSphereEnabled;
     public bool earthGeographicMapHigh8K;
@@ -72,4 +81,6 @@ public sealed class GameSettingsPlay
     public bool showTargetDirectionLine = true;
     public int lastScenario = (int)SimulationScenario.PlanetSurfaceStart;
     public bool showLodLoadingScreen;
+    public int flightCameraRig;
+    public string speedReferenceCycleKey = "Backquote";
 }

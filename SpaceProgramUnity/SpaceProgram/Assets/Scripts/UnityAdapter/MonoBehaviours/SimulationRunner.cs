@@ -158,9 +158,14 @@ public class SimulationRunner : MonoBehaviour
     double diagnosticBurnDuration;
     double[] timeScaleSteps = new double[]
     {
+        0.01,
+        0.1,
         0.25,
         0.5,
         1.0,
+        2.0,
+        3.0,
+        4.0,
         5.0,
         10.0,
         50.0,
@@ -179,6 +184,7 @@ public class SimulationRunner : MonoBehaviour
     FlightStatus lastRenderedFlightStatus = FlightStatus.Flying;
     string lastRenderedDockingMessage = string.Empty;
     CameraController cameraController;
+    FlightCameraRigMode appliedFlightCameraRig = FlightCameraRigMode.Horizon;
     GameObject cameraTargetFocusObject = null;
     SimulationHud simulationHud;
     LaunchPadView launchPadView;
@@ -217,6 +223,7 @@ public class SimulationRunner : MonoBehaviour
     string perfTimeScaleOverlayText = string.Empty;
     GUIStyle perfOverlayStyle;
     GUIStyle perfTimeScaleOverlayStyle;
+    GUIStyle cameraDiagOverlayStyle;
     GUIStyle perfOverlayBoxStyle;
     bool hasShipRenderPrevious;
     global::SimVector3 shipRenderPreviousComWorld;
@@ -299,6 +306,71 @@ public class SimulationRunner : MonoBehaviour
     public GameSessionMode SessionMode => sessionMode;
     internal bool IsMapModeActive => isMapModeActive;
     internal GraphicsBridgeDebugSnapshot GetGraphicsBridgeDebug() => graphicsBridgeDebug;
+
+    internal FlightCameraDiagSnapshot CaptureCameraDiag()
+    {
+        if (cameraController == null)
+        {
+            return default;
+        }
+
+        Transform cameraTransform = cameraController.transform;
+        Vector3 pivot = cameraController.GetFollowPivotWorldPosition();
+        Vector3 shipPosition = pivot;
+        Vector3 shipUp = Vector3.up;
+        Transform shipTransform = GetShipVisualTransform();
+
+        if (shipTransform != null)
+        {
+            Transform orientation = BodyView.GetVesselOrientationTransform(
+                shipTransform.gameObject
+            );
+            shipPosition = shipTransform.position;
+            shipUp = orientation != null ? orientation.up : shipTransform.up;
+        }
+
+        Vector3 planetPosition = new Vector3(0.0f, -1.0f, 0.0f);
+        Vector3 inertialUp = Vector3.up;
+
+        if (TryGetPlanetVisualTransform(out Transform planetTransform) && planetTransform != null)
+        {
+            planetPosition = planetTransform.position;
+            if (!WorldVisualBridge.TryGetFlightVisualInertialToFlight(out Quaternion inertialToFlight))
+            {
+                inertialToFlight = WorldVisualBridge.GetInertialMeshToFlightRotation(
+                    planetTransform.localRotation,
+                    GetInterpolatedPlanetSpinRotation()
+                );
+            }
+
+            inertialUp = inertialToFlight * Vector3.up;
+        }
+
+        cameraController.GetOrbitAngles(out float yaw, out float pitch);
+        string soiName = simulation != null ? simulation.activePrimaryBodyName : string.Empty;
+
+        return FlightCameraDiag.Build(
+            cameraTransform.position,
+            cameraTransform.rotation,
+            pivot,
+            shipPosition,
+            planetPosition,
+            shipUp,
+            inertialUp,
+            soiName,
+            cameraController.GetFocusTargetName(),
+            WorldVisualBridge.IsFlightPadSurfaceLocked(simulation),
+            isMapModeActive,
+            cameraController.IsChaseCameraActive,
+            yaw,
+            pitch,
+            Quaternion.Angle(
+                Quaternion.identity,
+                cameraController.GetResolvedOrbitFrameRotation()
+            ),
+            cameraController.GetOrbitDistanceUnity()
+        );
+    }
 
     public void LaunchScenario(SimulationScenario selectedScenario)
     {
@@ -805,6 +877,7 @@ public class SimulationRunner : MonoBehaviour
     void ResetScenarioThrottle()
     {
         throttle = 0.0f;
+        ResetScenarioTimeWarp();
 
         if (simulation == null)
         {
@@ -812,6 +885,14 @@ public class SimulationRunner : MonoBehaviour
         }
 
         simulation.ResetAllVesselPilotControls();
+    }
+
+    void ResetScenarioTimeWarp()
+    {
+        timeScale = 1.0;
+        warpRemainingTime = 0.0;
+        warpStopAfterCriticalEvent = false;
+        accumulator = 0.0;
     }
 
     void RebuildVisualWorldAfterLockstepJoin()
@@ -1132,8 +1213,7 @@ public class SimulationRunner : MonoBehaviour
 
         simulation.RespawnActiveVessel(GetLaunchShipPathForRespawn());
         playSession.ResetMissionTracking();
-        warpRemainingTime = 0.0;
-        warpStopAfterCriticalEvent = false;
+        ResetScenarioTimeWarp();
         autoBurnActive = false;
         autoBurnIsBurning = false;
         descentDiagnosticTrackingActive = false;
@@ -1528,6 +1608,8 @@ public class SimulationRunner : MonoBehaviour
             networkInputBuffer.Clear();
         }
         hasShipRenderPrevious = false;
+        appliedFlightCameraRig = FlightCameraRigMode.Horizon;
+        ResetScenarioTimeWarp();
 
         if (!preserveScenario)
         {
@@ -2025,6 +2107,11 @@ public class SimulationRunner : MonoBehaviour
             return;
         }
 
+        if (FlightKeyBindings.TryHandleSessionEscape())
+        {
+            return;
+        }
+
         if (!keyboard.escapeKey.wasPressedThisFrame)
         {
             return;
@@ -2047,6 +2134,12 @@ public class SimulationRunner : MonoBehaviour
 
         if (sessionMode == GameSessionMode.MainMenu)
         {
+            FlightDebugSettingsUi debugSettingsUi = FlightDebugSettingsUi.TryGetInstance();
+            if (debugSettingsUi != null && debugSettingsUi.TryHandleEscape())
+            {
+                return;
+            }
+
             FlightHudSettingsUi hudSettingsUi = FlightHudSettingsUi.TryGetInstance();
             if (hudSettingsUi != null && hudSettingsUi.TryHandleEscape())
             {
@@ -2069,6 +2162,12 @@ public class SimulationRunner : MonoBehaviour
 
         if (sessionMode == GameSessionMode.Flight && isInitialized)
         {
+            FlightDebugSettingsUi debugSettingsUi = FlightDebugSettingsUi.TryGetInstance();
+            if (debugSettingsUi != null && debugSettingsUi.TryHandleEscape())
+            {
+                return;
+            }
+
             FlightHudSettingsUi hudSettingsUi = FlightHudSettingsUi.TryGetInstance();
             if (hudSettingsUi != null && hudSettingsUi.TryHandleEscape())
             {
@@ -2093,6 +2192,8 @@ public class SimulationRunner : MonoBehaviour
         {
             return;
         }
+
+        simulation.selectedTargetName = targetBodyName ?? string.Empty;
 
         if (!isMultiplayerMode && simulation.scenario != scenario)
         {
@@ -3035,7 +3136,12 @@ public class SimulationRunner : MonoBehaviour
 
         Vessel vessel = simulation.GetVesselById(vesselId);
 
-        if (vessel == null || vessel.GetActiveStageFuelMass() <= 0.0)
+        if (
+            vessel == null ||
+            vessel.IsDestroyed ||
+            vessel.GetActiveStageFuelMass() <= 0.0 ||
+            !vessel.HasLiveMainEngine()
+        )
         {
             return false;
         }
@@ -3280,30 +3386,10 @@ public class SimulationRunner : MonoBehaviour
         }
     }
 
-    void SnapMapModeCameraToLaunchHemisphere()
+    void RestoreMapCameraViewAfterToggle()
     {
-        if (
-            cameraController == null ||
-            !isMapModeActive ||
-            !TryGetLodTerrainObject(out GameObject planetObject) ||
-            planetObject == null
-        )
-        {
-            return;
-        }
+        bool keepOrbit = cameraController != null && cameraController.HasStoredMapOrbit;
 
-        cameraTargetFocusObject = planetObject;
-        cameraController.SetTarget(planetObject.transform);
-        StabilizeMapCameraOnFocusBody(
-            CelestialTerrainRuntime.LodBodyName,
-            planetObject.transform,
-            snapOrbitFocus: false,
-            outwardHint: ResolveMapModeLaunchSiteOutwardMeshFrame()
-        );
-    }
-
-    void RestoreLastMapCameraFocusOrLaunchHemisphere()
-    {
         if (
             !string.IsNullOrEmpty(lastMapCameraFocusBodyName) &&
             bodyObjects != null &&
@@ -3313,12 +3399,45 @@ public class SimulationRunner : MonoBehaviour
         {
             StabilizeMapCameraOnFocusBody(
                 lastMapCameraFocusBodyName,
-                focusObject.transform
+                focusObject.transform,
+                restoreStoredOrbit: keepOrbit
             );
             return;
         }
 
-        SnapMapModeCameraToLaunchHemisphere();
+        BindMapCameraToShip(restoreStoredOrbit: keepOrbit);
+    }
+
+    void BindMapCameraToShip(bool restoreStoredOrbit)
+    {
+        if (
+            cameraController == null ||
+            !isMapModeActive ||
+            bodyObjects == null ||
+            !bodyObjects.TryGetValue("Ship", out GameObject shipObject) ||
+            shipObject == null
+        )
+        {
+            return;
+        }
+
+        cameraTargetFocusObject = shipObject;
+        cameraController.SetTarget(shipObject.transform, updateDefault: true);
+        lastMapCameraFocusBodyName = null;
+        SetOrbitFocusBody("Ship");
+        cameraController.SetMapOrbitDistanceFloorSimMeters(
+            WorldVisualBridge.MapShipOrbitSimMetersMin
+        );
+
+        if (!restoreStoredOrbit)
+        {
+            cameraController.SetOrbitAngles(90.0f, 10.0f);
+            cameraController.SetMapOrbitDistanceSimMeters(
+                WorldVisualBridge.MapShipOrbitSimMetersDefault
+            );
+        }
+
+        cameraController.SetMapOrbitPivotWorld(shipObject.transform.position);
     }
 
     /// <summary>
@@ -3328,7 +3447,8 @@ public class SimulationRunner : MonoBehaviour
         string bodyName,
         Transform focusTransform,
         bool snapOrbitFocus = true,
-        Vector3? outwardHint = null
+        Vector3? outwardHint = null,
+        bool restoreStoredOrbit = false
     )
     {
         if (
@@ -3338,6 +3458,16 @@ public class SimulationRunner : MonoBehaviour
             string.IsNullOrEmpty(bodyName)
         )
         {
+            return;
+        }
+
+        if (
+            bodyName == "Ship" ||
+            bodyName == "Station" ||
+            (simulation != null && simulation.IsVesselBodyName(bodyName))
+        )
+        {
+            BindMapCameraToShip(restoreStoredOrbit);
             return;
         }
 
@@ -3352,6 +3482,13 @@ public class SimulationRunner : MonoBehaviour
         else
         {
             RefreshMapModeCelestialTransforms();
+        }
+
+        if (restoreStoredOrbit)
+        {
+            cameraController.ClearOrbitFrameRotation();
+            cameraController.SetMapOrbitPivotWorld(focusTransform.position);
+            return;
         }
 
         Vector3 pivot = focusTransform.position;
@@ -3563,17 +3700,7 @@ public class SimulationRunner : MonoBehaviour
         if (cameraController != null)
         {
             cameraController.SetMapModeActive(isMapModeActive, GetVisualPositionScale());
-            ScenarioVisualDefaults.ApplyToCamera(
-                cameraController,
-                simulation,
-                isMapModeActive
-            );
-
-            if (!isMapModeActive)
-            {
-                pendingCameraChaseSnap = true;
-                cameraController.SnapOrbitNextUpdate();
-            }
+            cameraController.SnapOrbitNextUpdate();
         }
 
         ApplyDualRenderWorldMode();
@@ -3591,8 +3718,8 @@ public class SimulationRunner : MonoBehaviour
                 universeRoot.localPosition = Vector3.zero;
             }
 
+            RestoreMapCameraViewAfterToggle();
             RefreshMapModeCelestialTransforms();
-            RestoreLastMapCameraFocusOrLaunchHemisphere();
             RunMapModeGlobeDiagnostics();
         }
         else
@@ -3915,16 +4042,41 @@ public class SimulationRunner : MonoBehaviour
             perfOverlayBoxStyle = new GUIStyle(GUI.skin.box);
             perfOverlayBoxStyle.normal.background = Texture2D.grayTexture;
         }
+
+        if (cameraDiagOverlayStyle == null)
+        {
+            cameraDiagOverlayStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 13,
+                fontStyle = FontStyle.Bold
+            };
+        }
     }
 
     internal void DrawPerformanceOverlayGui()
     {
-        if (!showPerformanceOverlay || string.IsNullOrEmpty(perfOverlayText))
+        if (!showPerformanceOverlay)
         {
             return;
         }
 
         if (Event.current.type != EventType.Repaint)
+        {
+            return;
+        }
+
+        bool showFpsOverlay =
+            FlightDebugSettings.IsVisible(FlightDebugOverlay.Fps) &&
+            !string.IsNullOrEmpty(perfOverlayText);
+        bool showCameraOverlay =
+            FlightDebugSettings.IsVisible(FlightDebugOverlay.Camera) &&
+            isInitialized &&
+            !IsMainMenuVisible &&
+            !IsVabEditorActive &&
+            cameraController != null;
+
+        if (!showFpsOverlay && !showCameraOverlay)
         {
             return;
         }
@@ -3955,36 +4107,65 @@ public class SimulationRunner : MonoBehaviour
 
         const float width = 720.0f;
         const float height = 28.0f;
-        Rect rect = new Rect(
-            (Screen.width - width) * 0.5f,
-            8.0f,
-            width,
-            height
-        );
+        float nextOverlayY = 8.0f;
 
         int previousDepth = GUI.depth;
         Color previousColor = GUI.color;
         GUI.depth = 999;
-        GUI.color = new Color(0.0f, 0.0f, 0.0f, 0.55f);
-        GUI.Box(rect, GUIContent.none, perfOverlayBoxStyle);
-        GUI.color = Color.white;
-        GUI.Label(rect, perfOverlayText, perfOverlayStyle);
 
-        if (!string.IsNullOrEmpty(perfTimeScaleOverlayText))
+        if (showFpsOverlay)
         {
-            const float timeScaleHeight = 42.0f;
-            Rect timeScaleRect = new Rect(
+            Rect rect = new Rect(
                 (Screen.width - width) * 0.5f,
-                rect.yMax + 2.0f,
+                nextOverlayY,
                 width,
-                timeScaleHeight
+                height
             );
 
-            GUI.color = new Color(0.0f, 0.0f, 0.0f, 0.45f);
-            GUI.Box(timeScaleRect, GUIContent.none, perfOverlayBoxStyle);
-            GUI.color = new Color(0.95f, 0.88f, 0.45f);
-            perfTimeScaleOverlayStyle.normal.textColor = GUI.color;
-            GUI.Label(timeScaleRect, perfTimeScaleOverlayText, perfTimeScaleOverlayStyle);
+            GUI.color = new Color(0.0f, 0.0f, 0.0f, 0.55f);
+            GUI.Box(rect, GUIContent.none, perfOverlayBoxStyle);
+            GUI.color = Color.white;
+            GUI.Label(rect, perfOverlayText, perfOverlayStyle);
+            nextOverlayY = rect.yMax + 2.0f;
+
+            if (!string.IsNullOrEmpty(perfTimeScaleOverlayText))
+            {
+                const float timeScaleHeight = 42.0f;
+                Rect timeScaleRect = new Rect(
+                    (Screen.width - width) * 0.5f,
+                    nextOverlayY,
+                    width,
+                    timeScaleHeight
+                );
+
+                GUI.color = new Color(0.0f, 0.0f, 0.0f, 0.45f);
+                GUI.Box(timeScaleRect, GUIContent.none, perfOverlayBoxStyle);
+                GUI.color = new Color(0.95f, 0.88f, 0.45f);
+                perfTimeScaleOverlayStyle.normal.textColor = GUI.color;
+                GUI.Label(timeScaleRect, perfTimeScaleOverlayText, perfTimeScaleOverlayStyle);
+                nextOverlayY = timeScaleRect.yMax + 2.0f;
+            }
+        }
+
+        if (showCameraOverlay)
+        {
+            FlightCameraDiagSnapshot cameraDiag = CaptureCameraDiag();
+            if (!string.IsNullOrEmpty(cameraDiag.CompactLine))
+            {
+                const float cameraDiagWidth = 920.0f;
+                const float cameraDiagHeight = 24.0f;
+                Rect cameraDiagRect = new Rect(
+                    (Screen.width - cameraDiagWidth) * 0.5f,
+                    nextOverlayY,
+                    cameraDiagWidth,
+                    cameraDiagHeight
+                );
+                GUI.color = new Color(0.0f, 0.0f, 0.0f, 0.55f);
+                GUI.Box(cameraDiagRect, GUIContent.none, perfOverlayBoxStyle);
+                cameraDiagOverlayStyle.normal.textColor = new Color(0.75f, 0.92f, 1.0f);
+                GUI.color = Color.white;
+                GUI.Label(cameraDiagRect, cameraDiag.CompactLine, cameraDiagOverlayStyle);
+            }
         }
 
         GUI.color = previousColor;
@@ -4624,18 +4805,14 @@ public class SimulationRunner : MonoBehaviour
 
     internal void FocusCameraOnShip()
     {
-        if (
-            bodyObjects.TryGetValue("Ship", out GameObject shipObject) &&
-            shipObject != null
-        )
+        if (isMapModeActive)
         {
-            cameraTargetFocusObject = shipObject;
+            lastMapCameraFocusBodyName = null;
+            BindMapCameraToShip(restoreStoredOrbit: false);
+            return;
         }
 
-        if (cameraController != null)
-        {
-            cameraController.FocusOnDefaultTarget();
-        }
+        RestoreShipAsFlightFocus(applyCameraTarget: true);
     }
 
     internal string GetCameraFocusName()
@@ -5858,6 +6035,16 @@ public class SimulationRunner : MonoBehaviour
         return plannedDeltaVStep;
     }
 
+    internal void CycleShipHudSpeedMode()
+    {
+        if (simulation == null)
+        {
+            return;
+        }
+
+        simulation.CycleShipHudSpeedMode();
+    }
+
     internal void CycleTarget()
     {
         if (simulation == null || targetBodyNames.Length == 0)
@@ -5978,6 +6165,7 @@ public class SimulationRunner : MonoBehaviour
             return;
         }
 
+        string previousPrimaryBodyName = lastActivePrimaryBodyName;
         lastActivePrimaryBodyName = simulation.activePrimaryBodyName;
         timeScale = 1.0;
         CancelWarpForAtmosphere();
@@ -5987,7 +6175,110 @@ public class SimulationRunner : MonoBehaviour
             RebuildPreviewAnalysis();
         }
 
+        PreserveFlightCameraThroughSoiChange(previousPrimaryBodyName);
+        SnapShipRenderInterpolationToCurrent();
         SyncLodBodyWithActivePrimary();
+    }
+
+    void PreserveFlightCameraThroughSoiChange(string previousPrimaryBodyName)
+    {
+        if (cameraController == null || simulation == null || simulation.ship == null)
+        {
+            return;
+        }
+
+        // Vessel rig already rides the ship visual; applying the zenith delta
+        // would twist yaw/pitch a second time. Horizon still needs the delta
+        // (including roll) so a side view does not become nadir.
+        if (GameViewSettings.FlightCameraRig == FlightCameraRigMode.Vessel)
+        {
+            if (!isMapModeActive)
+            {
+                cameraController.SnapOrbitNextUpdate();
+            }
+
+            return;
+        }
+
+        if (!TryGetShipRadialOutRelativeToBodyName(
+            previousPrimaryBodyName,
+            out global::SimVector3 previousRadial
+        ))
+        {
+            if (
+                !hasShipRenderPrevious ||
+                shipRenderPreviousRadialOut.LengthSquared() <= 1e-12
+            )
+            {
+                if (!isMapModeActive)
+                {
+                    cameraController.SnapOrbitNextUpdate();
+                }
+
+                return;
+            }
+
+            previousRadial = shipRenderPreviousRadialOut;
+        }
+
+        global::SimVector3 nextRadial = simulation.GetShipSurfaceUp();
+
+        if (previousRadial.LengthSquared() <= 1e-12 || nextRadial.LengthSquared() <= 1e-12)
+        {
+            if (!isMapModeActive)
+            {
+                cameraController.SnapOrbitNextUpdate();
+            }
+
+            return;
+        }
+
+        Quaternion worldDelta = WorldVisualBridge.GetFlightVisualReorientationDelta(
+            simulation.ship.orientation,
+            previousRadial,
+            nextRadial
+        );
+
+        if (Quaternion.Angle(Quaternion.identity, worldDelta) < 0.05f)
+        {
+            if (!isMapModeActive)
+            {
+                cameraController.SnapOrbitNextUpdate();
+            }
+
+            return;
+        }
+
+        cameraController.PreserveOrbitThroughWorldReorientation(
+            worldDelta,
+            applyToLiveOrbit: !isMapModeActive
+        );
+    }
+
+    bool TryGetShipRadialOutRelativeToBodyName(
+        string bodyName,
+        out global::SimVector3 radial
+    )
+    {
+        radial = default;
+
+        Body body = FindSimulationBodyByName(bodyName);
+
+        if (body == null || simulation == null || simulation.ship == null)
+        {
+            return false;
+        }
+
+        global::SimVector3 offset = simulation.ship.GetCenterOfMassWorld()
+            .Subtract(body.position);
+
+        if (offset.LengthSquared() <= 1e-12)
+        {
+            return false;
+        }
+
+        radial = offset.Normalize();
+        return true;
     }
 
     void SyncLodBodyWithActivePrimary()
@@ -6011,6 +6302,21 @@ public class SimulationRunner : MonoBehaviour
 
         Debug.Log("SimulationRunner: flight LOD → " + nextName + " (SoI).");
         BodyView.RebindLodGlobes(bodyObjects);
+
+        SnapShipRenderInterpolationToCurrent();
+
+        if (cameraController != null && !isMapModeActive)
+        {
+            cameraController.SnapOrbitNextUpdate();
+        }
+
+        Transform universeRoot = GetFlightUniverseRoot();
+        if (universeRoot != null)
+        {
+            FlightUniverseMovement movement = universeRoot.GetComponent<FlightUniverseMovement>();
+            movement?.ResetPlanetRotationMemory();
+        }
+
         ApplyFlightUniverseVisualNow();
         SyncPlanetLodRuntime();
 
@@ -6120,7 +6426,18 @@ public class SimulationRunner : MonoBehaviour
         isPaused = false;
         int currentIndex = FindNearestTimeScaleIndex();
         int nextIndex = Mathf.Min(currentIndex + 1, timeScaleSteps.Length - 1);
-        timeScale = timeScaleSteps[nextIndex];
+        double nextScale = timeScaleSteps[nextIndex];
+
+        if (simulation != null)
+        {
+            double maxScale = simulation.GetRecommendedMaxTimeScale();
+            if (!double.IsPositiveInfinity(maxScale) && nextScale > maxScale)
+            {
+                nextScale = CapTimeScaleToMax(maxScale);
+            }
+        }
+
+        timeScale = nextScale;
     }
 
     internal void DecreaseTimeScale()
@@ -6702,6 +7019,17 @@ public class SimulationRunner : MonoBehaviour
             return;
         }
 
+        if (!isMapModeActive)
+        {
+            bool wasOffShip = cameraTargetFocusObject != null &&
+                !IsVesselCameraFocusObject(cameraTargetFocusObject);
+            RestoreShipAsFlightFocus(applyCameraTarget: true);
+            if (wasOffShip)
+            {
+                cameraController.SnapOrbitNextUpdate();
+            }
+        }
+
         if (cameraTargetFocusObject == null)
         {
             EnsureDefaultCameraFocusTarget();
@@ -6734,14 +7062,13 @@ public class SimulationRunner : MonoBehaviour
             focusTransform = cameraTargetFocusObject.transform;
         }
 
-        if (focusTransform != null && !isMapModeActive)
-        {
-            cameraController.SetOrbitFrameRotation(focusTransform.rotation);
-        }
+        // Dual-frame: skybox is inertial. Horizon rig = identity. Vessel rig =
+        // ship visual so the nose stays put in Game view (KSP Locked).
+        ApplyFlightCameraOrbitFrame(focusTransform);
 
         cameraController.UpdateShipFollow(
             chasePivot,
-            0.0f,
+            cameraController.GetOrbitRollDegrees(),
             GetCameraFocusEnvelopeRadius(),
             GetVisualPositionScale()
         );
@@ -6778,30 +7105,74 @@ public class SimulationRunner : MonoBehaviour
                 chasePivot,
                 chaseOffset,
                 chaseUp,
-                shipRotation
+                !isMapModeActive &&
+                GameViewSettings.FlightCameraRig == FlightCameraRigMode.Vessel ?
+                    shipRotation :
+                    Quaternion.identity
             );
             pendingCameraChaseSnap = false;
         }
     }
 
-    Vector3 GetCameraFocusPivotWorldPosition()
+    void ApplyFlightCameraOrbitFrame(Transform focusTransform)
     {
-        if (!isMapModeActive && simulation != null)
+        if (cameraController == null)
         {
-            if (
-                cameraTargetFocusObject == null ||
-                cameraTargetFocusObject.name == "Planet" ||
-                (
-                    !simulation.IsVesselBodyName(cameraTargetFocusObject.name) &&
-                    cameraTargetFocusObject.name != "Station"
-                )
-            )
-            {
-                RestoreShipAsFlightFocus(applyCameraTarget: false);
-            }
+            return;
         }
 
-        if (!isMapModeActive && cameraTargetFocusObject != null && simulation != null)
+        if (isMapModeActive)
+        {
+            cameraController.ClearOrbitFrameRotation();
+            return;
+        }
+
+        FlightCameraRigMode desired = GameViewSettings.FlightCameraRig;
+        Quaternion frame = Quaternion.identity;
+        if (desired == FlightCameraRigMode.Vessel && focusTransform != null)
+        {
+            frame = focusTransform.rotation;
+        }
+        else
+        {
+            desired = FlightCameraRigMode.Horizon;
+        }
+
+        if (appliedFlightCameraRig != desired)
+        {
+            cameraController.SetOrbitFrameKeepingWorldView(frame);
+            appliedFlightCameraRig = desired;
+            return;
+        }
+
+        if (desired == FlightCameraRigMode.Vessel)
+        {
+            cameraController.SetOrbitFrameRotation(frame);
+            return;
+        }
+
+        cameraController.ClearOrbitFrameRotation();
+    }
+
+    internal void CycleFlightCameraRig()
+    {
+        FlightCameraRigMode next = GameViewSettings.CycleFlightCameraRig();
+        ShowCenterHudMessage(
+            next == FlightCameraRigMode.Vessel ?
+                Localization.Translate("Camera: vessel") :
+                Localization.Translate("Camera: horizon")
+        );
+    }
+
+    Vector3 GetCameraFocusPivotWorldPosition()
+    {
+        if (!isMapModeActive)
+        {
+            RestoreShipAsFlightFocus(applyCameraTarget: true);
+            return GetShipCameraPivotWorldPosition();
+        }
+
+        if (cameraTargetFocusObject != null && simulation != null)
         {
             if (
                 cameraTargetFocusObject.name == "Ship" ||
@@ -6843,35 +7214,50 @@ public class SimulationRunner : MonoBehaviour
         return GetMapModeCameraPivotWorldPosition();
     }
 
+    Vector3 GetShipCameraPivotWorldPosition()
+    {
+        if (
+            simulation == null ||
+            bodyObjects == null ||
+            !bodyObjects.TryGetValue("Ship", out GameObject shipObject) ||
+            shipObject == null
+        )
+        {
+            return Vector3.zero;
+        }
+
+        Vessel focusVessel = simulation.ship;
+        global::SimVector3 comLocal = focusVessel != null ?
+            GetShipVisualCenterOfMassLocal() :
+            default;
+
+        if (focusVessel != null)
+        {
+            return BodyView.GetVesselCenterOfMassWorldPosition(
+                shipObject,
+                comLocal,
+                anchorVesselRootAtCom: true
+            );
+        }
+
+        if (BodyView.TryGetVesselVisualPivotWorld(shipObject, out Vector3 visualPivot))
+        {
+            return visualPivot;
+        }
+
+        return shipObject.transform.position;
+    }
+
     Vector3 GetMapModeCameraPivotWorldPosition()
     {
         if (!isMapModeActive)
         {
-            return cameraTargetFocusObject != null ?
-                cameraTargetFocusObject.transform.position :
-                Vector3.zero;
+            return Vector3.zero;
         }
 
         if (cameraTargetFocusObject != null)
         {
             return cameraTargetFocusObject.transform.position;
-        }
-
-        string focusName = GetOrbitFocusBodyName();
-
-        if (
-            bodyObjects != null &&
-            !string.IsNullOrEmpty(focusName) &&
-            bodyObjects.TryGetValue(focusName, out GameObject focusObject) &&
-            focusObject != null
-        )
-        {
-            return focusObject.transform.position;
-        }
-
-        if (TryGetLodTerrainObject(out GameObject planetObject) && planetObject != null)
-        {
-            return planetObject.transform.position;
         }
 
         return Vector3.zero;
@@ -6884,7 +7270,7 @@ public class SimulationRunner : MonoBehaviour
             return;
         }
 
-        RestoreShipAsFlightFocus(applyCameraTarget: false);
+        RestoreShipAsFlightFocus(applyCameraTarget: true);
     }
 
     void RestoreShipAsFlightFocus(bool applyCameraTarget = true)
@@ -6903,12 +7289,56 @@ public class SimulationRunner : MonoBehaviour
 
         if (applyCameraTarget && cameraController != null)
         {
-            cameraController.SetTarget(shipObject.transform);
+            cameraController.SetTarget(shipObject.transform, updateDefault: true);
         }
+    }
+
+    bool IsVesselCameraFocusObject(GameObject focusObject)
+    {
+        if (focusObject == null || simulation == null)
+        {
+            return false;
+        }
+
+        return simulation.IsVesselBodyName(focusObject.name) ||
+            focusObject.name == "Station";
+    }
+
+    bool CanAcceptCameraFocusTarget(Transform focusTransform)
+    {
+        if (focusTransform == null)
+        {
+            return false;
+        }
+
+        if (isMapModeActive)
+        {
+            return true;
+        }
+
+        return IsVesselCameraFocusObject(focusTransform.gameObject);
     }
 
     void OnCameraFocusTargetChanged(Transform focusTransform)
     {
+        if (!isMapModeActive)
+        {
+            if (
+                focusTransform == null ||
+                !IsVesselCameraFocusObject(focusTransform.gameObject)
+            )
+            {
+                RestoreShipAsFlightFocus(applyCameraTarget: true);
+            }
+            else if (cameraController != null)
+            {
+                cameraTargetFocusObject = focusTransform.gameObject;
+                cameraController.SetTarget(focusTransform, updateDefault: true);
+            }
+
+            return;
+        }
+
         cameraTargetFocusObject =
             focusTransform != null ? focusTransform.gameObject : null;
 
@@ -6917,7 +7347,7 @@ public class SimulationRunner : MonoBehaviour
             cameraController.SetTarget(focusTransform);
         }
 
-        if (!isMapModeActive || focusTransform == null)
+        if (focusTransform == null)
         {
             return;
         }
@@ -7128,9 +7558,19 @@ public class SimulationRunner : MonoBehaviour
 
     double GetCameraFocusEnvelopeRadius()
     {
-        if (cameraTargetFocusObject == null || simulation == null)
+        if (simulation == null)
         {
-            return simulation != null ? simulation.GetShipEnvelopeRadius() : 1.0;
+            return 1.0;
+        }
+
+        if (!isMapModeActive)
+        {
+            return simulation.GetShipEnvelopeRadius();
+        }
+
+        if (cameraTargetFocusObject == null)
+        {
+            return simulation.GetShipEnvelopeRadius();
         }
 
         Vessel vessel = FindSimulationVesselByName(cameraTargetFocusObject.name);
@@ -7332,8 +7772,19 @@ public class SimulationRunner : MonoBehaviour
             cameraController = flightCamera.gameObject.AddComponent<CameraController>();
         }
 
+        FlightCameraDiagOverlay cameraDiagOverlay =
+            flightCamera.GetComponent<FlightCameraDiagOverlay>();
+
+        if (cameraDiagOverlay == null)
+        {
+            cameraDiagOverlay = flightCamera.gameObject.AddComponent<FlightCameraDiagOverlay>();
+        }
+
+        cameraDiagOverlay.SetRunner(this);
+
         cameraController.ResolveFocusRoot = ResolveCameraFocusRoot;
         cameraController.ResolveMapClick = TryPickMapFocusFromScreen;
+        cameraController.AcceptFocusTarget = CanAcceptCameraFocusTarget;
         cameraController.FocusTargetChanged -= OnCameraFocusTargetChanged;
         cameraController.FocusTargetChanged += OnCameraFocusTargetChanged;
 
@@ -7366,7 +7817,7 @@ public class SimulationRunner : MonoBehaviour
 
         if (isMapModeActive)
         {
-            SnapMapModeCameraToLaunchHemisphere();
+            BindMapCameraToShip(restoreStoredOrbit: false);
         }
 
         SyncVisualSubsystemScales();

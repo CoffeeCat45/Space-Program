@@ -226,7 +226,9 @@ static class PlanetBiomeTerrainMaterialBuilder
         {
             material.SetFloat(
                 "_MacroBlendStart",
-                PlanetBiomeTerrainConfig.MacroSatelliteBlendStartMeters
+                CelestialTerrainRuntime.IsMoon ?
+                    PlanetBiomeTerrainConfig.MoonMacroBlendStartRealMeters :
+                    PlanetBiomeTerrainConfig.MacroSatelliteBlendStartMeters
             );
         }
 
@@ -234,13 +236,20 @@ static class PlanetBiomeTerrainMaterialBuilder
         {
             material.SetFloat(
                 "_MacroBlendEnd",
-                PlanetBiomeTerrainConfig.MacroSatelliteBlendEndMeters
+                CelestialTerrainRuntime.IsMoon ?
+                    PlanetBiomeTerrainConfig.MoonMacroBlendEndRealMeters :
+                    PlanetBiomeTerrainConfig.MacroSatelliteBlendEndMeters
             );
         }
 
         if (material.HasProperty("_MacroBlendMax"))
         {
-            material.SetFloat("_MacroBlendMax", PlanetBiomeTerrainConfig.MacroSatelliteMaxBlend);
+            material.SetFloat(
+                "_MacroBlendMax",
+                CelestialTerrainRuntime.IsMoon ?
+                    PlanetBiomeTerrainConfig.MoonMacroBlendMax :
+                    PlanetBiomeTerrainConfig.MacroSatelliteMaxBlend
+            );
         }
 
         if (material.HasProperty("_GroundAmbientFloor"))

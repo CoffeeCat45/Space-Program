@@ -61,17 +61,17 @@ class ShipBlock
         switch (blockType)
         {
             case ShipBlockType.FuelTank:
-                return 14.0;
+                return 21.0;
             case ShipBlockType.Engine:
-                return 10.0;
+                return 15.0;
             case ShipBlockType.Adapter:
-                return 12.0;
+                return 18.0;
             case ShipBlockType.RcsThruster:
-                return 6.0;
+                return 9.0;
             case ShipBlockType.DockingPort:
-                return 10.0;
+                return 15.0;
             default:
-                return 12.0;
+                return 18.0;
         }
     }
 

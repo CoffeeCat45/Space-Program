@@ -38,12 +38,14 @@ partial class Simulation
 
         ExitKeplerRails();
 
-        Body primary = GetActivePrimaryBody();
+        Body primary = ResolveSurfaceContactBody();
 
         if (primary == null || primary.radius <= 0.0)
         {
             return;
         }
+
+        LandedBodyFixedPose landedPose = CaptureLandedBodyFixedPose(primary);
 
         if (!IsPrimaryBodyStaticForLandedAssist(primary))
         {
@@ -53,13 +55,24 @@ partial class Simulation
         {
             primary.AdvanceSpin(dt);
         }
-        SyncLandedVesselToRotatingSurface(primary, ship);
+
+        RestoreLandedBodyFixedPose(primary, landedPose);
+        EnsurePadLaunchBodyFixedDirection(primary);
+
+        if (
+            ShipStabilityAssist.IsAttitudeHoldMode(ship.controlState.orientationMode) &&
+            !ShipStabilityAssist.HasRotationInput(ship)
+        )
+        {
+            ShipStabilityAssist.CaptureHoldFromCurrent(ship);
+        }
 
         SimVector3 padNormal = GetBodyFixedSurfaceNormal(primary);
 
         ProcessVesselStagingRequest(ship);
         ApplyVesselOrientationControl(ship, dt);
         ship.IntegrateOrientation(dt);
+        ShipStabilityAssist.FollowHoldAfterSteeringIntegrate(ship);
         ApplyVesselRcsThrust(ship, dt);
 
         if (ship.controlState.throttle > 0.01f)
@@ -72,7 +85,7 @@ partial class Simulation
             ship.thrustAcceleration = SimVector3.Zero();
         }
 
-        PinShipToSurface(primary, padNormal);
+        PushShipOutOfSurface(primary);
 
         double verticalThrust = Math.Max(0.0, SimVector3.Dot(ship.thrust, padNormal));
         double weight = ship.GetMass() * GetBodySurfaceGravity(primary);
@@ -117,5 +130,26 @@ partial class Simulation
     bool IsPrimaryBodyStaticForLandedAssist(Body primary)
     {
         return primary != null && primary.isStatic && (sun == null || sun.isStatic);
+    }
+
+    Body ResolveSurfaceContactBody()
+    {
+        if (SimulationScenarios.IsMoonSurfacePad(scenario) && moon != null)
+        {
+            return moon;
+        }
+
+        if (SimulationScenarios.IsPlanetSurfacePad(scenario) && planet != null)
+        {
+            return planet;
+        }
+
+        Body primary = GetActivePrimaryBody();
+        if (primary == null || primary == sun || IsRootBody(primary))
+        {
+            return moon ?? planet;
+        }
+
+        return primary;
     }
 }

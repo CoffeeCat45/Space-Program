@@ -32,6 +32,11 @@ public class FlightUniverseMovement : MonoBehaviour
         ApplyVisual(forcePlanetRotation: true);
     }
 
+    public void ResetPlanetRotationMemory()
+    {
+        hasLastPlanetRotation = false;
+    }
+
     void ApplyVisual(bool forcePlanetRotation)
     {
         if (runner == null || !runner.IsInitialized)
@@ -53,6 +58,7 @@ public class FlightUniverseMovement : MonoBehaviour
 
         if (runner.IsMapModeActive)
         {
+            WorldVisualBridge.EndFlightVisualInertialFrame();
             ApplyMapModeVisual(frozen);
             return;
         }
@@ -102,10 +108,11 @@ public class FlightUniverseMovement : MonoBehaviour
             bottomExtent,
             surfaceHeight
         );
-        transform.localPosition = WorldVisualBridge.GetFlightUniverseRootLocalOffsetForShipCom(
+        Vector3 universeLocal = WorldVisualBridge.GetFlightUniverseRootLocalOffsetForShipCom(
             altitude,
             bottomExtent
-        ) * distantScale;
+        );
+        transform.localPosition = IsFiniteVector(universeLocal) ? universeLocal : Vector3.zero;
 
         if (
             !runner.TryGetPlanetVisualTransform(out Transform planetTransform) ||
@@ -115,15 +122,21 @@ public class FlightUniverseMovement : MonoBehaviour
             return;
         }
 
-        planetTransform.localScale = Vector3.one * distantScale;
-        planetTransform.localPosition = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(
+        // Scale/pull only the LOD globe so its far limb stays in the flight far clip.
+        // Do not scale FlightUniverseRoot: from the Moon that also shrinks Earth in
+        // the sky and the background appears to spin until Earth SoI.
+        Vector3 planetLocal = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(
             surfaceHeight
         ) * distantScale;
-
-        if (!IsFiniteVector(planetTransform.localPosition))
+        if (!IsFiniteVector(planetLocal) || !IsFiniteVector(Vector3.one * distantScale))
         {
             planetTransform.localScale = Vector3.one;
             planetTransform.localPosition = WorldVisualBridge.GetFlightPlanetFixedLocalPosition(0.0);
+        }
+        else
+        {
+            planetTransform.localScale = Vector3.one * distantScale;
+            planetTransform.localPosition = planetLocal;
         }
 
         Quaternion flightRotation = WorldVisualBridge.GetFlightPlanetRotationFromBodyFixed(
@@ -151,6 +164,11 @@ public class FlightUniverseMovement : MonoBehaviour
             lastPlanetRotation = flightRotation;
             hasLastPlanetRotation = true;
         }
+
+        WorldVisualBridge.BeginFlightVisualInertialFrame(
+            planetTransform.localRotation,
+            runner.GetInterpolatedPlanetSpinRotation()
+        );
 
         runner.RefreshLaunchPadVisual();
         runner.RefreshFlightDistantCelestialTransforms();

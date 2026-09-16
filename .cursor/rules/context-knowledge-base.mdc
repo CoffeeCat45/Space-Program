@@ -14,6 +14,7 @@ alwaysApply: true
 - **Процесс с пользователем** (`делай`, чаты, якорь): `context/architecture/WORKING_WITH_USER.md`.
 - `SimulationConsole/` — заморожен, не в git; разработка и проверка только Unity Play mode.
 - Датасеты (Planet/MapMode/RSS DDS) только локально; на GitHub — код. Список: `GITHUB_HEAVY_FILES.md`.
+- GitHub remote + автор коммита: `GITHUB_HEAVY_FILES.md` (Commit / push) и `.cursor/rules/git-github.mdc`. Origin = `Space-Program.git`, email = noreply, не Gmail (GH007).
 
 ### Карта папок
 

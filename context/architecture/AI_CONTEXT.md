@@ -29,7 +29,7 @@
 
 `SimulationConsole` — заморожен, не в git. Разработка и проверка — только Unity Play mode.
 
-Высоты GEBCO/LDEM, PNG карт и RSS DDS живут **на диске** (`StreamingAssets/Planet`, `MapMode`, `Content/…`). На GitHub их нет — клон без этих папок не нарисует землю. Список: `GITHUB_HEAVY_FILES.md`.
+Высоты GEBCO/LDEM, PNG карт и RSS DDS живут **на диске** (`StreamingAssets/Planet`, `MapMode`, `Content/…`). На GitHub их нет — клон без этих папок не нарисует землю. Список: `GITHUB_HEAVY_FILES.md`. Origin: `https://github.com/CoffeeCat45/Space-Program.git`. Коммиты только с `CoffeeCat45@users.noreply.github.com` (GH007, не Gmail).
 
 ---
 

@@ -31,7 +31,9 @@ public class ShipConfigurationHud : MonoBehaviour
             !runner.IsInitialized ||
             runner.IsMainMenuVisible ||
             runner.IsVabEditorActive ||
-            FlightLodLoadingOverlay.IsBlocking
+            FlightLodLoadingOverlay.IsBlocking ||
+            FlightHudSettingsUi.IsOpen ||
+            FlightDebugSettingsUi.IsOpen
         )
         {
             return;
@@ -39,22 +41,18 @@ public class ShipConfigurationHud : MonoBehaviour
 
         EnsureStyles();
 
-        float panelWidth = 260.0f;
-        float buttonHeight = 28.0f;
-        float scenariosButtonHeight = 30.0f;
-        float rightMargin = 10.0f;
-        float topMargin = 10.0f;
-        float buttonGap = 8.0f;
-        float buttonX = Screen.width - panelWidth - rightMargin;
-        float scenariosButtonY = topMargin + buttonHeight + buttonGap;
-        float networkButtonY = scenariosButtonY + scenariosButtonHeight + buttonGap;
-        float panelTopY = networkButtonY + buttonHeight + buttonGap;
+        if (!FlightDebugSettings.IsVisible(FlightDebugOverlay.Configuration))
+        {
+            showPanel = false;
+        }
 
-        if (GUI.Button(
-            new Rect(buttonX, topMargin, panelWidth, buttonHeight),
-            T("Configuration"),
-            buttonStyle
-        ))
+        float panelWidth = 260.0f;
+        bool buttonVisible = FlightDebugChromeLayout.TryGetTopRightButtonRect(
+            FlightDebugOverlay.Configuration,
+            out Rect buttonRect
+        );
+
+        if (buttonVisible && GUI.Button(buttonRect, T("Configuration"), buttonStyle))
         {
             showPanel = !showPanel;
         }
@@ -64,6 +62,8 @@ public class ShipConfigurationHud : MonoBehaviour
             return;
         }
 
+        float buttonX = Screen.width - panelWidth - 10.0f;
+        float panelTopY = FlightDebugChromeLayout.GetTopRightStackBottomY();
         float panelHeight = 360.0f;
         Rect panelRect = new Rect(
             buttonX,

@@ -1,0 +1,21 @@
+﻿{
+    "id": "2",
+    "displayName": "2",
+    "category": "Engine",
+    "dryMass": 1.5,
+    "fuelCapacity": 0,
+    "maxThrustVac": 250,
+    "ispVacuum": 250,
+  "nodes":[
+    {
+            "localPosition": [0, 0, 0],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -4.76982402801514, 0],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

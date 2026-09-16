@@ -7,11 +7,19 @@ class SimulationPilotInput
 {
     public void Update(SimulationRunner runner)
     {
+        if (FlightKeyBindings.IsCapturingSpeedReferenceCycle)
+        {
+            FlightKeyBindings.TryCompleteCapture();
+            return;
+        }
+
         UpdateShip(runner);
         UpdateManeuvers(runner);
         UpdateTime(runner);
         UpdateTarget(runner);
+        UpdateSpeedReference(runner);
         UpdateAtmosphericPreviewToggle(runner);
+        UpdateCameraRig(runner);
     }
 
     void UpdateShip(SimulationRunner runner)
@@ -232,6 +240,21 @@ class SimulationPilotInput
         }
     }
 
+    void UpdateCameraRig(SimulationRunner runner)
+    {
+        Keyboard keyboard = Keyboard.current;
+
+        if (keyboard == null || keyboard.gKey == null)
+        {
+            return;
+        }
+
+        if (keyboard.gKey.wasPressedThisFrame)
+        {
+            runner.CycleFlightCameraRig();
+        }
+    }
+
     void UpdateManeuvers(SimulationRunner runner)
     {
         Keyboard keyboard = Keyboard.current;
@@ -381,6 +404,14 @@ class SimulationPilotInput
             {
                 runner.TryStage();
             }
+        }
+    }
+
+    void UpdateSpeedReference(SimulationRunner runner)
+    {
+        if (FlightKeyBindings.WasSpeedReferenceCyclePressed())
+        {
+            runner.CycleShipHudSpeedMode();
         }
     }
 

@@ -13,7 +13,7 @@
 - [[architecture/PHYSICS_EXPECTATIONS.md]]
 - [[architecture/CONVENTIONS.md]]
 
-Корень репо (не в `context/`): `GITHUB_HEAVY_FILES.md` — что не влезет на GitHub.
+Корень репо (не в `context/`): `GITHUB_HEAVY_FILES.md` — что не влезет на GitHub; origin `Space-Program.git` и noreply-автор (GH007).
 
 ## roadmap
 

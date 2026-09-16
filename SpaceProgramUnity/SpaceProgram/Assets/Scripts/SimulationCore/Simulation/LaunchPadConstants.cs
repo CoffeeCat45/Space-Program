@@ -14,8 +14,17 @@ public static class LaunchPadConstants
     /// <summary>Extra gap between the pad deck and the vessel contact plane.</summary>
     public const double PadVesselClearanceAboveDeckMeters = 2.0;
 
-    /// <summary>Surface arc distance within which the Cove launch pad stays visible.</summary>
-    public const double LaunchSitePadVisibilityRadiusMeters = 800.0;
+    /// <summary>
+    /// How far the Cove pad stays visible, and how far nearby GEBCO is replaced by
+    /// pad-base height. Mesh flatten radii live on FlightPlanetSphere (~100 m).
+    /// </summary>
+    public const double LaunchSitePadVisibilityRadiusMeters = 100.0;
+
+    /// <summary>
+    /// Physics contact on the pad deck, not pad-visibility.
+    /// A wide radius made desert next to Cove use pad-deck height: clip, then pin up.
+    /// </summary>
+    public const double PadPhysicsContactRadiusMeters = 48.0;
 
     /// <summary>
     /// VAB block layouts can report absurd projections; cap grounding and universe slide.

@@ -1,0 +1,19 @@
+﻿{
+    "id": "cabine-1",
+    "displayName": "Cabine 1",
+    "category": "Command",
+    "dryMass": 1,
+    "fuelCapacity": 0,
+  "nodes":[
+    {
+            "localPosition": [0, 2.0292661190033, 0.00524652004241943],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -0.0960380434989929, 0.00524652004241943],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

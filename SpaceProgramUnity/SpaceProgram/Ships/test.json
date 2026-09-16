@@ -4,34 +4,26 @@
   "blocks":[
     {
             "blockId": "block_1",
-            "partTemplateId": "restock-mk1-pod",
+            "partTemplateId": "cabine-1",
             "parentBlockId": "",
-            "localPosition": [0, 15.3999996185303, 0],
+            "localPosition": [0, 15.0960378646851, 0],
             "localRotation": [1, 0, 0, 0],
             "attachedToNodeIndex": -1
         },
     {
             "blockId": "block_2",
-            "partTemplateId": "restock-fueltank-125-1",
+            "partTemplateId": "rocket-fuel-tank",
             "parentBlockId": "block_1",
-            "localPosition": [0, -2.26999950408936, 0],
+            "localPosition": [0, 2.02926540374756, 0.00524652004241943],
             "localRotation": [0, 0, 1, 0],
-            "attachedToNodeIndex": 1
+            "attachedToNodeIndex": 0
         },
     {
             "blockId": "block_3",
-            "partTemplateId": "restock-fueltank-125-1",
-            "parentBlockId": "block_2",
-            "localPosition": [0, -3.73999977111816, 0],
-            "localRotation": [1, 0, 0, 0],
-            "attachedToNodeIndex": 1
-        },
-    {
-            "blockId": "block_4",
-            "partTemplateId": "restock-engine-reliant-2",
-            "parentBlockId": "block_3",
-            "localPosition": [0, -1.86999988555908, 0],
-            "localRotation": [1, 0, 0, 0],
+            "partTemplateId": "1",
+            "parentBlockId": "block_1",
+            "localPosition": [0, -0.0960378646850586, 0.00524652004241943],
+            "localRotation": [0, 0, 1, 0],
             "attachedToNodeIndex": 1
         }
     ]

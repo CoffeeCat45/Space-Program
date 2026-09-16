@@ -83,6 +83,12 @@ public class VabOptionsUi : MonoBehaviour
     Toggle showTargetLineToggle;
 
     [SerializeField]
+    Toggle partEnvironmentReflectionsToggle;
+
+    [SerializeField]
+    Dropdown flightCameraRigDropdown;
+
+    [SerializeField]
     Toggle lodLoadingScreenToggle;
 
     [SerializeField]
@@ -132,6 +138,9 @@ public class VabOptionsUi : MonoBehaviour
 
     [SerializeField]
     Button hudSettingsButton;
+
+    [SerializeField]
+    Button debugSettingsButton;
 
     [SerializeField]
     Text terrainLodDistanceValueLabel;
@@ -336,6 +345,8 @@ public class VabOptionsUi : MonoBehaviour
         displayModeDropdown = null;
         targetFrameRateInput = null;
         showTargetLineToggle = null;
+        partEnvironmentReflectionsToggle = null;
+        flightCameraRigDropdown = null;
         lodLoadingScreenToggle = null;
         terrainLodDistanceSlider = null;
         terrainLoadSpeedSlider = null;
@@ -353,6 +364,7 @@ public class VabOptionsUi : MonoBehaviour
         expCloudSoftnessSlider = null;
         cloudRendererDropdown = null;
         hudSettingsButton = null;
+        debugSettingsButton = null;
         terrainLodDistanceValueLabel = null;
         terrainLoadSpeedValueLabel = null;
         terrainMaxLodValueLabel = null;
@@ -392,6 +404,12 @@ public class VabOptionsUi : MonoBehaviour
         if (IsVabBlockingEscape())
         {
             return false;
+        }
+
+        FlightDebugSettingsUi debugSettingsUi = FlightDebugSettingsUi.TryGetInstance();
+        if (debugSettingsUi != null && debugSettingsUi.TryHandleEscape())
+        {
+            return true;
         }
 
         FlightHudSettingsUi hudSettingsUi = FlightHudSettingsUi.TryGetInstance();
@@ -461,6 +479,18 @@ public class VabOptionsUi : MonoBehaviour
         if (showTargetLineToggle != null)
         {
             showTargetLineToggle.onValueChanged.AddListener(OnShowTargetLineToggleChanged);
+        }
+
+        if (partEnvironmentReflectionsToggle != null)
+        {
+            partEnvironmentReflectionsToggle.onValueChanged.AddListener(
+                OnPartEnvironmentReflectionsToggleChanged
+            );
+        }
+
+        if (flightCameraRigDropdown != null)
+        {
+            flightCameraRigDropdown.onValueChanged.AddListener(OnFlightCameraRigDropdownChanged);
         }
 
         if (lodLoadingScreenToggle != null)
@@ -554,6 +584,11 @@ public class VabOptionsUi : MonoBehaviour
             hudSettingsButton.onClick.AddListener(OnHudSettingsButtonClicked);
         }
 
+        if (debugSettingsButton != null)
+        {
+            debugSettingsButton.onClick.AddListener(OnDebugSettingsButtonClicked);
+        }
+
         if (saveButton != null)
         {
             saveButton.onClick.AddListener(SaveSettings);
@@ -614,6 +649,18 @@ public class VabOptionsUi : MonoBehaviour
         if (showTargetLineToggle != null)
         {
             showTargetLineToggle.isOn = GameViewSettings.ShowTargetDirectionLine;
+        }
+
+        if (partEnvironmentReflectionsToggle != null)
+        {
+            partEnvironmentReflectionsToggle.isOn =
+                GameSettingsStore.ReadPartEnvironmentReflections();
+        }
+
+        if (flightCameraRigDropdown != null)
+        {
+            flightCameraRigDropdown.value =
+                GameViewSettings.FlightCameraRig == FlightCameraRigMode.Vessel ? 1 : 0;
         }
 
         if (lodLoadingScreenToggle != null)
@@ -961,6 +1008,28 @@ public class VabOptionsUi : MonoBehaviour
         GameViewSettings.SetShowTargetDirectionLine(enabled);
     }
 
+    void OnPartEnvironmentReflectionsToggleChanged(bool enabled)
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        GameSettingsStore.WritePartEnvironmentReflections(enabled);
+    }
+
+    void OnFlightCameraRigDropdownChanged(int index)
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        GameViewSettings.SetFlightCameraRig(
+            index == 1 ? FlightCameraRigMode.Vessel : FlightCameraRigMode.Horizon
+        );
+    }
+
     void OnLodLoadingScreenToggleChanged(bool enabled)
     {
         if (suppressUiEvents)
@@ -1152,6 +1221,22 @@ public class VabOptionsUi : MonoBehaviour
         hudSettingsUi.OpenPanel();
     }
 
+    void OnDebugSettingsButtonClicked()
+    {
+        if (suppressUiEvents)
+        {
+            return;
+        }
+
+        FlightDebugSettingsUi debugSettingsUi = FlightDebugSettingsUi.TryGetInstance();
+        if (debugSettingsUi == null)
+        {
+            debugSettingsUi = gameObject.AddComponent<FlightDebugSettingsUi>();
+        }
+
+        debugSettingsUi.OpenPanel();
+    }
+
     void SaveSettings()
     {
         ApplyCurrentUiToGpu();
@@ -1162,6 +1247,22 @@ public class VabOptionsUi : MonoBehaviour
         if (showTargetLineToggle != null)
         {
             GameViewSettings.SetShowTargetDirectionLine(showTargetLineToggle.isOn);
+        }
+
+        if (partEnvironmentReflectionsToggle != null)
+        {
+            GameSettingsStore.WritePartEnvironmentReflections(
+                partEnvironmentReflectionsToggle.isOn
+            );
+        }
+
+        if (flightCameraRigDropdown != null)
+        {
+            GameViewSettings.SetFlightCameraRig(
+                flightCameraRigDropdown.value == 1 ?
+                    FlightCameraRigMode.Vessel :
+                    FlightCameraRigMode.Horizon
+            );
         }
 
         if (lodLoadingScreenToggle != null)
@@ -1497,12 +1598,36 @@ public class VabOptionsUi : MonoBehaviour
             "Линия к цели"
         );
         showTargetLineToggle.isOn = GameViewSettings.ShowTargetDirectionLine;
+        partEnvironmentReflectionsToggle = CreateToggleOnlyRow(
+            viewBody,
+            "Небо в металле деталей"
+        );
+        partEnvironmentReflectionsToggle.isOn = GameSettingsStore.ReadPartEnvironmentReflections();
+        CreateHintLabel(
+            viewBody,
+            "Выкл по умолчанию. Вкл: в космосе звёзды в блеске, у земли — небо. Без съёмки сцены."
+        );
+        CreateFieldLabel(viewBody, "Камера полёта");
+        flightCameraRigDropdown = CreateStyledDropdown(viewBody, -1f);
+        SetDropdownOptions(flightCameraRigDropdown, "Горизонт", "Корабль");
+        flightCameraRigDropdown.value =
+            GameViewSettings.FlightCameraRig == FlightCameraRigMode.Vessel ? 1 : 0;
+        CreateHintLabel(
+            viewBody,
+            "Горизонт — зенит вверх (как сейчас на паде). Корабль — нос не крутится в кадре. Клавиша G."
+        );
 
         CreateSectionHeader(settingsContent, "HUD полёта");
         Transform hudBody = CreateSectionBody(settingsContent);
         hudSettingsButton = CreateStyledButton(
             hudBody,
             "Настройки HUD",
+            PrimaryButtonColor,
+            flexible: true
+        );
+        debugSettingsButton = CreateStyledButton(
+            hudBody,
+            "Debug",
             PrimaryButtonColor,
             flexible: true
         );

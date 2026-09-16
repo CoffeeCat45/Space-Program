@@ -1,0 +1,21 @@
+﻿{
+    "id": "3",
+    "displayName": "3",
+    "category": "Engine",
+    "dryMass": 3.5,
+    "fuelCapacity": 0,
+    "maxThrustVac": 450,
+    "ispVacuum": 200,
+  "nodes":[
+    {
+            "localPosition": [0, 0, -9.5367431640625E-07],
+            "direction": [0, 1, 0],
+            "role": "stack_top"
+        },
+    {
+            "localPosition": [0, -6.55609083175659, -9.5367431640625E-07],
+            "direction": [0, -1, 0],
+            "role": "stack_bottom"
+        }
+    ]
+}

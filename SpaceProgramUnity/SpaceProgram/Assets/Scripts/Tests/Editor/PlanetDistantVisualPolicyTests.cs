@@ -88,6 +88,7 @@ public sealed class PlanetDistantVisualPolicyTests
 
         Assert.AreEqual(1f, atMillion, 1e-4f);
         Assert.Less(atEightMillion, 1f);
+        Assert.GreaterOrEqual(atEightMillion, 0.002f);
 
         float center = EarthRadius + 8_000_000f;
         float farLimb = center + EarthRadius +

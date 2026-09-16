@@ -50,9 +50,6 @@ static class ScenarioVisualDefaults
 
         if (isMapMode)
         {
-            // Orbit yaw/pitch are snapped to the launch-site outward radial when map mode
-            // activates (see SimulationRunner.SnapMapModeCameraToLaunchHemisphere /
-            // CameraController.SnapMapModeOrbitToPlanetExterior).
             camera.SetMapOrbitDistanceSimMeters(800_000.0);
         }
         else

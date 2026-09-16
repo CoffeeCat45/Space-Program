@@ -69,7 +69,7 @@ public class SimulationHud : MonoBehaviour
             return;
         }
 
-        if (FlightHudSettingsUi.IsOpen)
+        if (FlightHudSettingsUi.IsOpen || FlightDebugSettingsUi.IsOpen)
         {
             return;
         }
@@ -136,7 +136,8 @@ public class SimulationHud : MonoBehaviour
             VabOptionsUi optionsUi = VabOptionsUi.TryGetInstance();
             bool settingsOpen =
                 (optionsUi != null && optionsUi.IsOpen) ||
-                FlightHudSettingsUi.IsOpen;
+                FlightHudSettingsUi.IsOpen ||
+                FlightDebugSettingsUi.IsOpen;
 
             if (!settingsOpen)
             {
@@ -156,7 +157,7 @@ public class SimulationHud : MonoBehaviour
             return;
         }
 
-        if (FlightHudSettingsUi.IsOpen)
+        if (FlightHudSettingsUi.IsOpen || FlightDebugSettingsUi.IsOpen)
         {
             return;
         }
@@ -214,6 +215,10 @@ public class SimulationHud : MonoBehaviour
             GUILayout.Space(6);
             GUILayout.Label(T("H: details"), labelStyle);
             GUILayout.Label("B: CoM / blocks", labelStyle);
+            GUILayout.Label(
+                T("Speed frame") + ": " + FlightKeyBindings.FormatSpeedReferenceCycleKey(),
+                labelStyle
+            );
         }
 
         if (showComDebug)
@@ -372,21 +377,21 @@ public class SimulationHud : MonoBehaviour
 
     void DrawMultiplayerPanelToggle()
     {
-        const float rightMargin = 10f;
-        const float panelWidth = 260f;
-        const float topMargin = 10f;
-        const float configurationButtonHeight = 28f;
-        const float scenariosButtonHeight = 30f;
-        const float networkButtonHeight = 28f;
-        const float buttonGap = 8f;
-        float buttonX = Screen.width - panelWidth - rightMargin;
-        float scenariosButtonY = topMargin + configurationButtonHeight + buttonGap;
-        float buttonY = scenariosButtonY + scenariosButtonHeight + buttonGap;
+        if (!FlightDebugSettings.IsVisible(FlightDebugOverlay.Network))
+        {
+            showMultiplayerPanel = false;
+            return;
+        }
 
-        if (GUI.Button(
-            new Rect(buttonX, buttonY, panelWidth, networkButtonHeight),
-            "🌐 Сеть"
+        if (!FlightDebugChromeLayout.TryGetTopRightButtonRect(
+            FlightDebugOverlay.Network,
+            out Rect buttonRect
         ))
+        {
+            return;
+        }
+
+        if (GUI.Button(buttonRect, "🌐 Сеть"))
         {
             showMultiplayerPanel = !showMultiplayerPanel;
         }
@@ -396,15 +401,8 @@ public class SimulationHud : MonoBehaviour
     {
         const float rightMargin = 10f;
         const float panelWidth = 260f;
-        const float topMargin = 10f;
-        const float configurationButtonHeight = 28f;
-        const float scenariosButtonHeight = 30f;
-        const float networkButtonHeight = 28f;
-        const float buttonGap = 8f;
         float buttonX = Screen.width - panelWidth - rightMargin;
-        float scenariosButtonY = topMargin + configurationButtonHeight + buttonGap;
-        float networkButtonY = scenariosButtonY + scenariosButtonHeight + buttonGap;
-        float panelY = networkButtonY + networkButtonHeight + buttonGap;
+        float panelY = FlightDebugChromeLayout.GetTopRightStackBottomY();
         Rect panelRect = new Rect(buttonX, panelY, panelWidth, 260f);
         GUIStyle panelBoxStyle = new GUIStyle(GUI.skin.box)
         {
@@ -582,13 +580,24 @@ public class SimulationHud : MonoBehaviour
             fontSize = fontSize + 2,
         };
 
-        const float width = 460f;
-        const float height = 30f;
-        Rect rect = new Rect(
-            (Screen.width - width) * 0.5f,
-            Screen.height - height - 14f,
-            width,
-            height
+        const float compassWidth = 460f;
+        const float compassHeight = 30f;
+        const float buttonWidth = 236f;
+        const float buttonHeight = 44f;
+        const float gap = 12f;
+        float bottom = 14f;
+        float totalWidth = buttonWidth + gap + compassWidth;
+        float startX = (Screen.width - totalWidth) * 0.5f;
+        float buttonY = Screen.height - buttonHeight - bottom;
+        float compassY = Screen.height - compassHeight - bottom;
+
+        DrawSpeedReferenceButton(new Rect(startX, buttonY, buttonWidth, buttonHeight));
+
+        Rect compassRect = new Rect(
+            startX + buttonWidth + gap,
+            compassY,
+            compassWidth,
+            compassHeight
         );
 
         string text = string.Format(
@@ -597,12 +606,80 @@ public class SimulationHud : MonoBehaviour
             pitch,
             roll
         );
-        GUI.Label(rect, text, compassStyle);
+        GUI.Label(compassRect, text, compassStyle);
+    }
+
+    void DrawSpeedReferenceButton(Rect buttonRect)
+    {
+        if (simulation == null || runner == null)
+        {
+            return;
+        }
+
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = fontSize + 1,
+            alignment = TextAnchor.MiddleCenter,
+            wordWrap = true,
+        };
+
+        Event current = Event.current;
+        if (
+            current != null &&
+            buttonRect.Contains(current.mousePosition) &&
+            current.type == EventType.MouseDown &&
+            current.button == 1
+        )
+        {
+            current.Use();
+            FlightKeyBindings.StartCaptureSpeedReferenceCycle();
+            return;
+        }
+
+        string label;
+        if (FlightKeyBindings.IsCapturingSpeedReferenceCycle)
+        {
+            label = T("Press a key");
+        }
+        else
+        {
+            string modeLabel = T(simulation.GetShipHudSpeedModeLabel());
+            if (simulation.GetShipHudSpeedMode() == ShipHudSpeedMode.Target)
+            {
+                string targetName = runner.GetTargetBodyName();
+                modeLabel += string.IsNullOrEmpty(targetName) ?
+                    " —" :
+                    " · " + targetName;
+            }
+
+            label = modeLabel + "  " + FormatNumber(simulation.GetShipHudSpeed()) +
+                "\n" + FlightKeyBindings.FormatSpeedReferenceCycleKey();
+        }
+
+        if (GUI.Button(buttonRect, label, buttonStyle))
+        {
+            if (FlightKeyBindings.IsCapturingSpeedReferenceCycle)
+            {
+                FlightKeyBindings.CancelCapture();
+            }
+            else
+            {
+                runner.CycleShipHudSpeedMode();
+            }
+        }
     }
 
     void DrawTerrainGraphicsToggleButton()
     {
         if (runner == null || !runner.IsInitialized || runner.IsMainMenuVisible)
+        {
+            return;
+        }
+
+        if (!FlightDebugChromeLayout.TryGetMidRightButtonRect(
+            FlightDebugOverlay.Gfx,
+            out Rect buttonRect
+        ))
         {
             return;
         }
@@ -615,8 +692,6 @@ public class SimulationHud : MonoBehaviour
         }
 
         EnsureLabelStyle();
-        GetRightDebugButtonRect(0, out float x, out float y, out float width, out float height);
-
         GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
         {
             fontSize = fontSize + 1,
@@ -624,7 +699,7 @@ public class SimulationHud : MonoBehaviour
 
         string label = panel.IsUserVisible ? "GFX: ON" : "GFX: OFF";
 
-        if (GUI.Button(new Rect(x, y, width, height), label, buttonStyle))
+        if (GUI.Button(buttonRect, label, buttonStyle))
         {
             panel.ToggleUserVisible();
         }
@@ -637,9 +712,15 @@ public class SimulationHud : MonoBehaviour
             return;
         }
 
-        EnsureLabelStyle();
-        GetRightDebugButtonRect(1, out float x, out float y, out float width, out float height);
+        if (!FlightDebugChromeLayout.TryGetMidRightButtonRect(
+            FlightDebugOverlay.Com,
+            out Rect buttonRect
+        ))
+        {
+            return;
+        }
 
+        EnsureLabelStyle();
         GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
         {
             fontSize = fontSize + 1,
@@ -647,29 +728,10 @@ public class SimulationHud : MonoBehaviour
 
         string label = showComDebug ? "CoM: ON" : "CoM: OFF";
 
-        if (GUI.Button(new Rect(x, y, width, height), label, buttonStyle))
+        if (GUI.Button(buttonRect, label, buttonStyle))
         {
             showComDebug = !showComDebug;
         }
-    }
-
-    static void GetRightDebugButtonRect(
-        int stackIndexFromTop,
-        out float x,
-        out float y,
-        out float width,
-        out float height
-    )
-    {
-        const float buttonWidth = 112f;
-        const float buttonHeight = 34f;
-        const float margin = 16f;
-        const float gap = 8f;
-        x = Screen.width - buttonWidth - margin;
-        float bottomY = Screen.height * 0.58f - buttonHeight * 0.5f;
-        y = bottomY - (1 - stackIndexFromTop) * (buttonHeight + gap);
-        width = buttonWidth;
-        height = buttonHeight;
     }
 
     void DrawDebugGraphicsBridgePanel(float top)
@@ -1460,7 +1522,9 @@ public class SimulationHud : MonoBehaviour
         );
         GUILayout.Label(
             T("V: warp to CA") + "  " +
-            T("F: focus ship"),
+            T("F: focus ship") + "  " +
+            T("G: camera mode") + "  " +
+            "F7: camera diag",
             labelStyle
         );
         GUILayout.Label(T("RMB: warp to maneuver start"), labelStyle);
@@ -1480,11 +1544,27 @@ public class SimulationHud : MonoBehaviour
             T("X: cut"),
             labelStyle
         );
-        GUILayout.Label(T(", / . / ] / [: time x0.25..x100"), labelStyle);
+        GUILayout.Label(T(", / . / ] / [: time x0.01..x10000"), labelStyle);
         GUILayout.Label(T("P / Space: pause"), labelStyle);
         GUILayout.Label(T("O: toggle atmospheric preview"), labelStyle);
         GUILayout.Label(T("T: stage"), labelStyle);
         GUILayout.Label("M: orbital map mode", labelStyle);
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(
+            T("Speed frame") + ": " + FlightKeyBindings.FormatSpeedReferenceCycleKey(),
+            labelStyle
+        );
+        if (GUILayout.Button(
+            FlightKeyBindings.IsCapturingSpeedReferenceCycle ?
+                T("Press a key") :
+                T("Rebind"),
+            GUILayout.Width(110)
+        ))
+        {
+            FlightKeyBindings.StartCaptureSpeedReferenceCycle();
+        }
+        GUILayout.EndHorizontal();
+        GUILayout.Label(T("Speed frame hint"), labelStyle);
     }
 
     string GetNextEventLabel()

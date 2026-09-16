@@ -26,7 +26,7 @@ static class LandingConfig
 
     // Порог |v_vertical| / v_surface для аварии при посадке (м/с).
 
-    public const double CrashSpeedThreshold = 12.0;
+    public const double CrashSpeedThreshold = 18.0;
 
 
 

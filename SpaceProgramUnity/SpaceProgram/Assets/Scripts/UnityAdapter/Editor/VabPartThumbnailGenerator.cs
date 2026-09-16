@@ -73,6 +73,26 @@ static class VabPartThumbnailGenerator
         return false;
     }
 
+    internal static bool GenerateForContainerPrefab(string containerPrefabPath, bool force)
+    {
+        if (!CanRunThumbnailGeneration())
+        {
+            return false;
+        }
+
+        EnsureIconsFolder();
+        bool generated = TryGenerateThumbnail(containerPrefabPath, force);
+
+        if (generated)
+        {
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            PartThumbnailLoader.ClearCache();
+        }
+
+        return generated;
+    }
+
     internal static void GenerateMissingForDefinitions(
         IEnumerable<ReStockBatchParts.PartDefinition> definitions
     )

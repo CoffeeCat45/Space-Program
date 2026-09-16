@@ -265,7 +265,28 @@ public static class PlanetPqsLodRules
         bool isCoarserEdgeNeighborOfViewer
     )
     {
-        if (isCoarserEdgeNeighborOfViewer)
+        return AngularRingCapBlocksSplit(
+            level,
+            ringCap,
+            isCoarserEdgeNeighborOfViewer,
+            viewerStillClimbing: true
+        );
+    }
+
+    /// <summary>
+    /// Catch-up may ignore RING only while the ship tile is still below max LOD.
+    /// After the pad is at cap, L7 next to L8 is the intended +1 ring — not a crack
+    /// to close. Leaving the exemption on caused split/merge of that ring every tick
+    /// (finest and +1 twitching, <c>refine=1</c> after warmup).
+    /// </summary>
+    public static bool AngularRingCapBlocksSplit(
+        int level,
+        int ringCap,
+        bool isCoarserEdgeNeighborOfViewer,
+        bool viewerStillClimbing
+    )
+    {
+        if (isCoarserEdgeNeighborOfViewer && viewerStillClimbing)
         {
             return false;
         }
@@ -280,6 +301,30 @@ public static class PlanetPqsLodRules
     public static bool AllowAngularRingMerge(bool viewerLeafBlockedByCrack)
     {
         return !viewerLeafBlockedByCrack;
+    }
+
+    /// <summary>
+    /// RING merge of a parent that still contains the ship collapses the pad 2×2
+    /// (baseline <c>parentL7</c> 4×L8) and the same tick splits it back
+    /// (<c>lastFlap merge F4 L7 0.50,0.50 | split …</c>). Far leftover still merges.
+    /// </summary>
+    public static bool AngularRingMayMergeParent(bool subtreeContainsViewer)
+    {
+        return !subtreeContainsViewer;
+    }
+
+    /// <summary>
+    /// Pad 2×2: the ship cell and its three siblings under the same parent.
+    /// Do not require <c>childLevel == viewerLeafLevel</c> — FindViewerLeaf can
+    /// return the parent branch (UV in parent, missed by children) so the leaf
+    /// level is −1 and RING would merge the rocket tile.
+    /// </summary>
+    public static bool NodeIsViewerFinestQuadMember(
+        bool chunkContainsViewer,
+        bool parentContainsViewer
+    )
+    {
+        return chunkContainsViewer || parentContainsViewer;
     }
 
     /// <summary>
@@ -307,6 +352,33 @@ public static class PlanetPqsLodRules
         }
 
         return required < 0 ? 0 : required;
+    }
+
+    /// <summary>
+    /// After the ship tile is at max LOD, only that leaf may catch-up. Every
+    /// in-disk L7 then split Cape L5 cousins (in-disk on Earth, HORIZON on the
+    /// Moon) and RING merged them the same tick (<c>lastFlap split L5 0.4,0.16 |
+    /// merge L5 0.34,0.16</c>, plus far <c>L3 0.0,0.0</c>).
+    /// </summary>
+    public static bool AllowCatchUpFromLeaf(
+        bool leafContainsViewer,
+        bool viewerStillNeedsSplit
+    )
+    {
+        return leafContainsViewer || viewerStillNeedsSplit;
+    }
+
+    /// <summary>
+    /// RING merge of a 2×2 must not fire because <em>one</em> child is over cap.
+    /// A Cape L5 next to the pad has a near child at cap=7 and a far child at
+    /// cap=0 — merging the whole parent undoes the split every tick.
+    /// </summary>
+    public static bool AngularRingParentShouldMerge(
+        bool anyNonExemptChildOverCap,
+        bool anyNonExemptChildAtOrUnderCap
+    )
+    {
+        return anyNonExemptChildOverCap && !anyNonExemptChildAtOrUnderCap;
     }
 
     /// <summary>
@@ -473,6 +545,110 @@ public static class PlanetPqsLodRules
             ? faceCenter + vSpan * 0.25
             : faceCenter - vSpan * 0.25;
         return true;
+    }
+
+    /// <summary>
+    /// Moon pad sits on the cube-face centre. Cape (~0.39, 0.16) must not use
+    /// cross-L1 finest catch-up.
+    /// </summary>
+    public static bool FaceCenterPadNeedsCrossL1CatchUp(double viewerU, double viewerV)
+    {
+        const double faceCenter = 0.5;
+        return System.Math.Abs(viewerU - faceCenter) <= FaceCenterDiagonalCatchUpUv &&
+            System.Math.Abs(viewerV - faceCenter) <= FaceCenterDiagonalCatchUpUv;
+    }
+
+    /// <summary>
+    /// Half-open L1 quadrants: u/v = 0.5 belongs to the + side, same as
+    /// <see cref="UvInsideLodNode"/>.
+    /// </summary>
+    public static bool CatchUpProbeLeftViewerL1(
+        double probeU,
+        double probeV,
+        double viewerU,
+        double viewerV
+    )
+    {
+        int probeQuadU = probeU >= 0.5 ? 1 : 0;
+        int probeQuadV = probeV >= 0.5 ? 1 : 0;
+        int viewerQuadU = viewerU >= 0.5 ? 1 : 0;
+        int viewerQuadV = viewerV >= 0.5 ? 1 : 0;
+        return probeQuadU != viewerQuadU || probeQuadV != viewerQuadV;
+    }
+
+    /// <summary>
+    /// Face-center pad: edge probes that stay in the ship's L1 are the +1 RING
+    /// (baseline <c>parentL6</c> L7 leaves). Probes that cross into another L1
+    /// must reach the ship LOD (<c>L1q 8/8/8/8</c>), not stop at viewer−1
+    /// (<c>L1q 7/8/8/7</c>).
+    /// </summary>
+    public static int FaceCenterCrossL1CatchUpRequired(
+        int defaultRequired,
+        int viewerLeafLevel,
+        double viewerU,
+        double viewerV,
+        double probeU,
+        double probeV
+    )
+    {
+        int required = defaultRequired < 0 ? 0 : defaultRequired;
+        if (viewerLeafLevel <= required)
+        {
+            return required;
+        }
+
+        if (!FaceCenterPadNeedsCrossL1CatchUp(viewerU, viewerV) ||
+            !CatchUpProbeLeftViewerL1(probeU, probeV, viewerU, viewerV))
+        {
+            return required;
+        }
+
+        return viewerLeafLevel;
+    }
+
+    /// <summary>
+    /// Inner corner of an L1 that meets UV 0.5, 0.5 (inclusive on the shared
+    /// seams so a tile whose maxU/maxV is 0.5 still counts).
+    /// </summary>
+    public static bool NodeUvTouchesFaceCenter(
+        double minU,
+        double maxU,
+        double minV,
+        double maxV
+    )
+    {
+        const double center = 0.5;
+        const double eps = 1e-5;
+        return minU <= center + eps &&
+            maxU >= center - eps &&
+            minV <= center + eps &&
+            maxV >= center - eps;
+    }
+
+    /// <summary>
+    /// Catch-up splits the other L1 to L8, then RING/span merge of that L6/L7
+    /// in the same tick undoes it (<c>lastFlap split … 0.50,0.48 | merge</c>).
+    /// Protect only the inner two levels around the ship tile, not the whole L1.
+    /// </summary>
+    public static bool FaceCenterCatchUpTileMustNotMerge(
+        bool faceCenterPad,
+        bool nodeTouchesFaceCenter,
+        int nodeLevel,
+        int viewerLeafLevel
+    )
+    {
+        if (!faceCenterPad || !nodeTouchesFaceCenter || viewerLeafLevel < 0)
+        {
+            return false;
+        }
+
+        int minInnerLevel = viewerLeafLevel - 2;
+        if (minInnerLevel < 0)
+        {
+            minInnerLevel = 0;
+        }
+
+        return nodeLevel >= minInnerLevel;
     }
 
     /// <summary>
